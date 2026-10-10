@@ -4,7 +4,7 @@ const nftController = require('../controllers/nft');
 
 /**
  * Public by design — this is what ContractNFT.sol's tokenURI() resolves to on-chain, meant to
- * be crawled by wallets, marketplaces and block explorers that have no ContracTify session.
+ * be crawled by wallets, marketplaces and block explorers that have no Cachetify session.
  * No auth middleware here on purpose.
  */
 

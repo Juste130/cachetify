@@ -8,7 +8,7 @@ const { formatReference } = require('../utils/contract-naming');
 
 /**
  * This is what ContractNFT.sol's tokenURI() now points to on-chain (see the constructor
- * comment there) — hit by wallets, marketplaces and block explorers that have no ContracTify
+ * comment there) — hit by wallets, marketplaces and block explorers that have no Cachetify
  * session at all, so every route in this file is deliberately public: no auth middleware, no
  * assumption that the caller is a logged-in user.
  */
@@ -75,8 +75,8 @@ exports.getMetadata = async (req, res, next) => {
 
         res.json({
             name: contractRow?.title
-                ? `ContracTify — ${contractRow.title} · ${formatReference(contractRow.reference)}`
-                : `ContracTify — Certificat #${tokenId}`,
+                ? `Cachetify — ${contractRow.title} · ${formatReference(contractRow.reference)}`
+                : `Cachetify — Certificat #${tokenId}`,
             description:
                 "Preuve de signature horodatée et infalsifiable, ancrée sur le réseau Polygon. " +
                 "Ce certificat atteste qu'un contrat a été finalisé par l'ensemble de ses signataires ; " +

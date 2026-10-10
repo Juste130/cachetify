@@ -49,9 +49,16 @@ const config = {
     paymentsEnabled: process.env.PAYMENTS_ENABLED === 'true',
     escrowSchedulerIntervalMs: parseInt(process.env.ESCROW_SCHEDULER_INTERVAL_MS || String(15 * 60 * 1000), 10),
 
-    // Pinata (IPFS)
-    pinataJwt: process.env.PINATA_JWT,
-    pinataGateway: process.env.PINATA_GATEWAY || 'https://gateway.pinata.cloud',
+    // Fonctionnalités hors périmètre du mémoire de licence (séquestre, vérification
+    // d'identité, certificat NFT) : masquées par défaut (routes ET interface), code et tests
+    // conservés intacts. Repasser une valeur à 'true' pour la réactiver, par exemple une fois
+    // un partenaire de paiement ou d'identité disponible — voir requireFeature() dans
+    // middleware/feature-flag.js pour la façon dont ces drapeaux gardent les routes.
+    features: {
+        escrow: process.env.FEATURE_ESCROW === 'true',
+        kyc: process.env.FEATURE_KYC === 'true',
+        nft: process.env.FEATURE_NFT === 'true',
+    },
 
     // Identity verification (KYC) — Smile ID, chosen for confirmed coverage of all four
     // target countries (Bénin, Togo, Côte d'Ivoire, Sénégal) with a single integration. Off
@@ -80,7 +87,7 @@ const config = {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
     },
-    emailFrom: process.env.EMAIL_FROM || 'noreply@contractify.com',
+    emailFrom: process.env.EMAIL_FROM || 'noreply@cachetify.com',
 
     // JWT
     jwt: {
@@ -101,6 +108,7 @@ const config = {
         inviteMaxRequests: parseInt(process.env.RATE_LIMIT_INVITE_MAX_REQUESTS || '10', 10),
         resendWindowMs: parseInt(process.env.RATE_LIMIT_RESEND_WINDOW_MS || '300000', 10), // 5 min
         resendMaxRequests: parseInt(process.env.RATE_LIMIT_RESEND_MAX_REQUESTS || '5', 10),
+        verifyMaxRequests: parseInt(process.env.RATE_LIMIT_VERIFY_MAX_REQUESTS || '20', 10),
     },
 
     // Logging
@@ -115,7 +123,6 @@ const requiredEnvVars = [
     'JWT_SECRET',
     'JWT_REFRESH_SECRET',
     'GROQ_API_KEY',
-    'PINATA_JWT',
     'POLYGON_RPC_URL',
     'CONTRACT_MANAGER_ADDRESS',
     'ADMIN_WALLET_ADDRESS',
@@ -130,19 +137,6 @@ if (missing.length > 0) {
         throw new Error(msg);
     } else {
         console.warn(`Warning: ${msg}`);
-    }
-}
-
-// Validate Pinata JWT format early to provide clearer errors for malformed tokens
-if (config.pinataJwt) {
-    const parts = config.pinataJwt.split('.');
-    if (parts.length !== 3) {
-        const msg = 'PINATA_JWT appears malformed: expected a JWT with three dot-separated segments';
-        if (config.nodeEnv === 'production') {
-            throw new Error(msg);
-        } else {
-            console.warn(`Warning: ${msg}`);
-        }
     }
 }
 

@@ -181,7 +181,7 @@ export function NFTCard({
       {ipfsUrl && (
         <a href={ipfsUrl} target="_blank" rel="noopener noreferrer">
           <Button variant="outline" size="sm" className="w-full gap-2 text-xs">
-            <ExternalLink className="size-3.5" /> Voir l'acte sur IPFS
+            <ExternalLink className="size-3.5" /> Voir le document
           </Button>
         </a>
       )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { FEATURES } from "@/lib/features";
 import {
   LayoutDashboard,
   FileText,
@@ -60,10 +61,13 @@ export function AppSidebar() {
   ];
 
   // Menu items admin (TODO: afficher seulement si user.role === 'admin')
+  // "Litiges" n'existe que pour arbitrer des séquestres bloqués — masqué avec FEATURES.escrow
+  // (la page /admin/incidents reste joignable directement pour consulter l'historique, non
+  // supprimée, juste retirée du menu).
   const adminMenuItems = [
     { id: "admin-users", label: "Gestion utilisateurs", icon: UserCog, href: "/admin/users" },
     { id: "admin-contracts", label: "Tous les contrats", icon: FileText, href: "/admin/contracts" },
-    { id: "admin-incidents", label: "Litiges", icon: Gavel, href: "/admin/incidents" },
+    ...(FEATURES.escrow ? [{ id: "admin-incidents", label: "Litiges", icon: Gavel, href: "/admin/incidents" }] : []),
     { id: "admin-analytics", label: "Analytics", icon: BarChart3, href: "/admin/analytics" },
     { id: "admin-system", label: "Système", icon: Shield, href: "/admin/system" },
   ];
@@ -158,7 +162,7 @@ export function AppSidebar() {
           // so it rendered as plain body text, not a logotype.
           <Link href="/" className="flex items-center gap-3">
             <SealMark className="w-10 h-10 shrink-0" />
-            <h2 className="text-2xl font-bold tracking-tight leading-none text-[#FFC107]">ContracTify</h2>
+            <h2 className="text-2xl font-bold tracking-tight leading-none text-[#FFC107]">Cachetify</h2>
           </Link>
         ) : (
           <Link href="/" className="mx-auto">

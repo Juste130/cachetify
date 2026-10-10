@@ -65,7 +65,7 @@ exports.dismissPrompt = async (req, res, next) => {
 
 /**
  * Smile ID's webhook — deliberately NOT behind `authenticate` (Smile ID's servers have no
- * ContracTify session), gated instead by verifyCallbackSignature. Always responds 200 once
+ * Cachetify session), gated instead by verifyCallbackSignature. Always responds 200 once
  * the signature check has run, even on a business-logic no-op (unknown job id already
  * logged inside handleCallback) — Smile ID retries a non-2xx response, and retrying a
  * legitimately-unmatched job id would never succeed differently the second time.
