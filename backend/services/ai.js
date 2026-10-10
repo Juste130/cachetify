@@ -106,6 +106,27 @@ const STANDARD_CLAUSES_REMINDER = `Sauf si le type de contrat les rend manifeste
 - la langue faisant foi en cas de traduction ;
 - dans l'article sur le droit applicable, précise si le litige doit être porté devant les juridictions compétentes ou peut faire l'objet d'une médiation/arbitrage, plutôt que de te contenter d'un renvoi vague.`;
 
+// Champs personnels d'une partie, et le marqueur neutre qui les remplace avant tout envoi
+// au service d'IA (un tiers externe) — voir le besoin non fonctionnel "Confidentialité"
+// (mémoire, chapitre 2, section Sécurité et protection des données).
+const PARTY_PII_FIELDS = [
+    ['name', 'NOM'],
+    ['email', 'COURRIEL'],
+    ['phone', 'TELEPHONE'],
+    ['address', 'ADRESSE'],
+    ['rccm', 'RCCM'],
+    ['ifu', 'IFU'],
+    ['legalRepName', 'REPRESENTANT'],
+    ['legalRepTitle', 'QUALITE_REPRESENTANT'],
+    ['dateOfBirth', 'DATE_NAISSANCE'],
+];
+
+// Repère, en secours, un courriel ou un numéro de téléphone qui traînerait dans un texte
+// libre sans venir d'un champ de formulaire connu (ex: un contrat importé puis retapé à la
+// main). Complète le marquage nominatif ci-dessus, ne le remplace pas.
+const EMAIL_PATTERN = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+const PHONE_PATTERN = /(?:\+?\d[\s.-]?){8,15}/g;
+
 class AIService {
     constructor() {
         this.client = new Groq({ apiKey: config.groqApiKey });
@@ -146,12 +167,81 @@ class AIService {
         }
     }
 
+    // ─── Minimisation des données personnelles avant envoi au service d'IA ──────
+    // Remplace les champs personnels d'une partie par un marqueur neutre (ex: "[[PARTIE_A
+    // NOM]]"), pour que le texte réellement envoyé au tiers externe (Groq) ne contienne ni
+    // nom, ni courriel, ni adresse. entries sert ensuite à réinsérer les vraies valeurs dans
+    // la réponse reçue.
+    maskPartyData(partyData, label) {
+        const masked = { ...partyData };
+        const entries = [];
+        for (const [field, tag] of PARTY_PII_FIELDS) {
+            const value = partyData?.[field];
+            if (typeof value === 'string' && value.trim().length >= 2) {
+                const marker = `[[${label}_${tag}]]`;
+                entries.push({ value: value.trim(), marker });
+                masked[field] = marker;
+            }
+        }
+        return { masked, entries };
+    }
+
+    // Les valeurs les plus longues d'abord : une valeur courte contenue dans une valeur plus
+    // longue (ex: un prénom qui apparaît aussi dans une adresse) ne doit pas la fragmenter.
+    maskText(text, entries) {
+        let out = text;
+        for (const { value, marker } of [...entries].sort((a, b) => b.value.length - a.value.length)) {
+            out = out.split(value).join(marker);
+        }
+        return out;
+    }
+
+    unmaskText(text, entries) {
+        let out = text;
+        for (const { value, marker } of entries) {
+            out = out.split(marker).join(value);
+        }
+        return out;
+    }
+
+    // Filet de sécurité pour validateContract : un contrat peut contenir un courriel ou un
+    // numéro de téléphone qui ne correspond à aucun champ de formulaire connu (contrat
+    // importé, retapé à la main). Remplace ce qui ressemble à ces motifs par un marqueur
+    // générique, réversible de la même façon que maskPartyData.
+    maskFreeTextPii(text) {
+        const entries = [];
+        let i = 0;
+        let out = text.replace(EMAIL_PATTERN, (match) => {
+            i += 1;
+            const marker = `[[COURRIEL_DETECTE_${i}]]`;
+            entries.push({ value: match, marker });
+            return marker;
+        });
+        let j = 0;
+        out = out.replace(PHONE_PATTERN, (match) => {
+            // Un motif de 8 à 15 chiffres espacés capture aussi des références de contrat ou
+            // des montants (ex: "10 000 000 FCFA") — on ne masque que s'il y a au moins 8
+            // chiffres réels, pour limiter les faux positifs sur ces cas.
+            const digits = match.replace(/\D/g, '');
+            if (digits.length < 8) return match;
+            j += 1;
+            const marker = `[[TELEPHONE_DETECTE_${j}]]`;
+            entries.push({ value: match, marker });
+            return marker;
+        });
+        return { masked: out, entries };
+    }
+
     // ─── Génération d'un contrat complet ────────────────────────────────────────
     async generateContract(templateType, partyAData, partyBData, additionalClauses, context) {
         try {
-            const prompt = this.buildContractPrompt(templateType, partyAData, partyBData, additionalClauses, context);
+            const { masked: maskedA, entries: entriesA } = this.maskPartyData(partyAData, 'PARTIE_A');
+            const { masked: maskedB, entries: entriesB } = this.maskPartyData(partyBData, 'PARTIE_B');
+            const maskEntries = [...entriesA, ...entriesB];
 
-            const content = await this._chat([
+            const prompt = this.buildContractPrompt(templateType, maskedA, maskedB, additionalClauses, context);
+
+            const rawContent = await this._chat([
                 {
                     role: 'system',
                     // Le public cible ne connaît pas le Markdown — un contrat truffé de #, **
@@ -171,6 +261,7 @@ class AIService {
             // sections imposées + rappel de clauses standards font quelques centaines de
             // tokens) tout en restant assez généreux pour un contrat complet en Markdown.
 
+            const content = this.unmaskText(rawContent, maskEntries);
             const suggestions = this.extractClauseSuggestions(content);
 
             logger.info(`Contract generated for template: ${templateType}`);
@@ -233,8 +324,21 @@ class AIService {
     }
 
     // ─── Validation d'un contrat ─────────────────────────────────────────────────
-    async validateContract(contractText) {
+    // partyAData/partyBData sont optionnels : quand l'appelant les fournit (le formulaire de
+    // création les a déjà en mémoire au moment de l'appel), ils permettent de masquer les
+    // mêmes champs personnels que generateContract. Dans tous les cas, un filet de sécurité
+    // (maskFreeTextPii) masque en plus tout courriel ou numéro de téléphone détecté dans le
+    // texte libre, même s'il ne vient d'aucun champ connu (contrat importé, retapé à la main).
+    async validateContract(contractText, { partyAData, partyBData } = {}) {
         try {
+            const maskEntries = [];
+            if (partyAData) maskEntries.push(...this.maskPartyData(partyAData, 'PARTIE_A').entries);
+            if (partyBData) maskEntries.push(...this.maskPartyData(partyBData, 'PARTIE_B').entries);
+
+            const maskedFull = this.maskText(contractText, maskEntries);
+            const { masked: maskedTruncated, entries: freeTextEntries } = this.maskFreeTextPii(maskedFull.substring(0, 9000));
+            const allEntries = [...maskEntries, ...freeTextEntries];
+
             const text = await this._chat([
                 {
                     role: 'system',
@@ -250,11 +354,11 @@ class AIService {
                     // contrat normal (résiliation, juridiction, clause de signature jamais
                     // vérifiées) alors que cette étape est présentée à l'utilisateur comme
                     // obligatoire et complète.
-                    content: `Analyse ce contrat et identifie les problèmes de conformité et les suggestions d'amélioration :\n\n${contractText.substring(0, 9000)}`,
+                    content: `Analyse ce contrat et identifie les problèmes de conformité et les suggestions d'amélioration :\n\n${maskedTruncated}`,
                 },
             ], { max_tokens: 2048, temperature: 0 });
 
-            const { issues, suggestions } = this.parseValidation(text);
+            const { issues, suggestions } = this.parseValidation(this.unmaskText(text, allEntries));
             logger.info('Contract validation completed');
 
             return {
@@ -331,31 +435,51 @@ class AIService {
                     // CONTRACT_TEMPLATES on the frontend — one shared "document type" concept
                     // used whether it comes from an explicit template choice or, here, a guess
                     // from imported text, instead of two vocabularies that can drift apart.
-                    content: 'Tu analyses le texte extrait d\'un document PDF importé sur une plateforme de contrats. Réponds UNIQUEMENT avec un objet JSON strict, sans texte autour, sans markdown, exactement dans cette forme : {"parties": [{"name": "<nom complet>", "email": "<email>"}], "looksLikeContract": true|false, "looksLikeContractConfidence": "high"|"medium"|"low", "mentionsExistingSignature": true|false, "signatureConfidence": "high"|"medium"|"low", "signatureExcerpt": "<courte phrase du texte qui l\'indique, ou null>", "documentType": {"knownType": "cdi"|"cdd"|"freelance"|"location"|"nda"|"commercial"|null, "suggestedLabel": "<court libellé en français du type de document si aucune valeur connue ne correspond, ex. \'Bail commercial\', \'Reconnaissance de dette\', ou null si un knownType a été choisi>"}}. Règle stricte : n\'invente JAMAIS un email qui n\'apparaît pas mot pour mot dans le texte fourni — si un nom de partie est identifiable mais sans email associé dans le texte, mets email à une chaîne vide. Limite la liste "parties" aux personnes ou entités clairement identifiées comme parties au contrat (pas les témoins, pas les tiers mentionnés en passant), au maximum 4. Pour documentType : choisis knownType UNIQUEMENT s\'il correspond vraiment (un CDI n\'est pas un CDD, une location n\'est pas un commercial) ; sinon knownType est null et suggestedLabel donne un libellé court (2-4 mots) et précis du type réel de document.',
+                    content: 'Tu analyses le texte extrait d\'un document PDF importé sur une plateforme de contrats. Réponds UNIQUEMENT avec un objet JSON strict, sans texte autour, sans markdown, exactement dans cette forme : {"parties": [{"name": "<nom complet>", "email": "<email>", "type": "company"|"individual"|null, "rccm": "<numéro RCCM tel qu\'il apparaît dans le texte, ou chaîne vide>", "ifu": "<numéro IFU tel qu\'il apparaît dans le texte, ou chaîne vide>", "legalRepName": "<nom du représentant légal tel qu\'il apparaît, ou chaîne vide>", "legalRepTitle": "<qualité du représentant légal (ex. Gérant, Directeur Général), ou chaîne vide>", "dateOfBirthText": "<date de naissance telle qu\'elle apparaît littéralement dans le texte, ou chaîne vide>", "dateOfBirthIso": "<la même date normalisée au format AAAA-MM-JJ, ou chaîne vide si dateOfBirthText est vide>"}], "looksLikeContract": true|false, "looksLikeContractConfidence": "high"|"medium"|"low", "mentionsExistingSignature": true|false, "signatureConfidence": "high"|"medium"|"low", "signatureExcerpt": "<courte phrase du texte qui l\'indique, ou null>", "documentType": {"knownType": "cdi"|"cdd"|"freelance"|"location"|"nda"|"commercial"|null, "suggestedLabel": "<court libellé en français du type de document si aucune valeur connue ne correspond, ex. \'Bail commercial\', \'Reconnaissance de dette\', ou null si un knownType a été choisi>"}}. Règles strictes : n\'invente JAMAIS un email, un numéro RCCM/IFU, un nom/qualité de représentant légal ou une date de naissance qui n\'apparaît pas mot pour mot (ou chiffre pour chiffre) dans le texte fourni — si l\'information n\'est pas littéralement présente, laisse le champ correspondant vide (chaîne vide), ne devine jamais. "type" est une classification (pas une transcription) : mets "company" si la partie est clairement une société/entreprise (SARL, SA, SAS, mention RCCM/IFU, "la société"...), "individual" si c\'est clairement une personne physique (Monsieur/Madame, "né(e) le"...), null si ce n\'est pas déterminable. Les champs rccm/ifu/legalRepName/legalRepTitle ne concernent que les parties de type "company" ; dateOfBirthText/dateOfBirthIso ne concernent que les parties de type "individual" — laisse-les vides sinon. Limite la liste "parties" aux personnes ou entités clairement identifiées comme parties au contrat (pas les témoins, pas les tiers mentionnés en passant), au maximum 4. Pour documentType : choisis knownType UNIQUEMENT s\'il correspond vraiment (un CDI n\'est pas un CDD, une location n\'est pas un commercial) ; sinon knownType est null et suggestedLabel donne un libellé court (2-4 mots) et précis du type réel de document.',
                 },
                 {
                     role: 'user',
                     content: `Texte extrait du document (peut être tronqué ou partiellement illisible) :\n\n${extractedText.substring(0, 6000)}`,
                 },
-            ], { max_tokens: 1024, temperature: 0 });
+            ], { max_tokens: 1536, temperature: 0 });
 
             const parsed = JSON.parse(text.replace(/```json|```/gi, '').trim());
             const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+            // Same discipline as the email check just below: a value the model claims came
+            // from the document is only trusted once its own literal source excerpt is
+            // verified to actually occur in the extracted text — a hallucinated RCCM/IFU/
+            // legal-rep name would otherwise misidentify a real company on a real contract.
+            const verifiedText = (v) => typeof v === 'string' && v.trim() && extractedText.includes(v.trim()) ? v.trim() : '';
             const parties = Array.isArray(parsed.parties)
                 ? parsed.parties
                     .filter((p) => p && typeof p.name === 'string' && p.name.trim())
                     .slice(0, 4)
-                    .map((p) => ({
-                        name: p.name.trim(),
+                    .map((p) => {
                         // Deuxième garde-fou côté serveur, au cas où le modèle n'aurait pas
                         // respecté la consigne : un email halluciné qui ne figure pas dans le
                         // texte source est pire qu'aucun email (invitation envoyée à la
                         // mauvaise personne) — mieux vaut le rejeter et laisser un champ vide
                         // que de le faire remonter.
-                        email: typeof p.email === 'string' && emailPattern.test(p.email.trim()) && extractedText.includes(p.email.trim())
+                        const email = typeof p.email === 'string' && emailPattern.test(p.email.trim()) && extractedText.includes(p.email.trim())
                             ? p.email.trim()
-                            : '',
-                    }))
+                            : '';
+                        const type = p.type === 'company' || p.type === 'individual' ? p.type : null;
+                        const dateOfBirthText = verifiedText(p.dateOfBirthText);
+                        const dateOfBirthIso = dateOfBirthText && typeof p.dateOfBirthIso === 'string' && isoDatePattern.test(p.dateOfBirthIso.trim())
+                            ? p.dateOfBirthIso.trim()
+                            : '';
+                        return {
+                            name: p.name.trim(),
+                            email,
+                            type,
+                            rccm: verifiedText(p.rccm),
+                            ifu: verifiedText(p.ifu),
+                            legalRepName: verifiedText(p.legalRepName),
+                            legalRepTitle: verifiedText(p.legalRepTitle),
+                            dateOfBirth: dateOfBirthIso,
+                        };
+                    })
                 : [];
 
             const confidenceOrDefault = (v) => ['high', 'medium', 'low'].includes(v) ? v : 'low';
@@ -429,11 +553,22 @@ Utilise un langage juridique précis et professionnel, en français courant comp
         return [improved, explanation];
     }
 
+    // Le modèle ne respecte pas toujours le format demandé à la lettre : il ajoute parfois un
+    // espace avant le ":" ("PROBLÈMES :") ou entoure les titres de section et certaines lignes
+    // d'emphase Markdown ("**PROBLÈMES :**"), que le système lui interdit pourtant. L'ancienne
+    // regex, qui exigeait "PROBLÈMES:" au caractère près, ne matchait alors plus du tout : la
+    // section entière disparaissait silencieusement, et validateContract renvoyait "aucun
+    // problème" alors que le modèle en avait bel et bien listé — constaté en pratique en
+    // retirant l'article "Rémunération" d'un contrat de test, correctement repéré par le
+    // modèle mais jamais remonté par ce parsing (voir mémoire, chapitre 3). Nettoyer le
+    // Markdown et tolérer l'espace avant les ":" avant de chercher les sections règle les deux
+    // à la fois.
     parseValidation(result) {
         const issues = [];
         const suggestions = [];
-        const problemsSection = result.match(/PROBLÈMES:([\s\S]*?)(?=SUGGESTIONS:|$)/i);
-        const suggestionsSection = result.match(/SUGGESTIONS:([\s\S]*?)$/i);
+        const cleaned = result.replace(/\*\*/g, '');
+        const problemsSection = cleaned.match(/PROBLÈMES\s*:([\s\S]*?)(?=SUGGESTIONS\s*:|$)/i);
+        const suggestionsSection = cleaned.match(/SUGGESTIONS\s*:([\s\S]*?)$/i);
 
         if (problemsSection) {
             issues.push(
