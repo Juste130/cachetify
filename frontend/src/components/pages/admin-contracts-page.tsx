@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { contractsApi } from "@/lib/api/contracts";
 import { formatReference } from "@/lib/utils/contractNaming";
-import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -98,10 +97,7 @@ export function AdminContractsPage() {
     };
 
     return (
-        <div className="flex min-h-screen bg-muted">
-            <AppSidebar />
-
-            <main className="flex-1 p-4 sm:p-6 md:p-8 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
+        <main className="flex-1 p-4 sm:p-6 md:p-8 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="mb-2">Tous les contrats</h1>
@@ -184,6 +180,7 @@ export function AdminContractsPage() {
                                 <TableRow
                                     key={contract.id}
                                     className="cursor-pointer hover:bg-muted/50"
+                                    onMouseEnter={() => router.prefetch(`/contract-details?id=${contract.id}`)}
                                     onClick={() => router.push(`/contract-details?id=${contract.id}`)}
                                 >
                                     <TableCell className="font-medium">
@@ -217,6 +214,5 @@ export function AdminContractsPage() {
                     )}
                 </Card>
             </main>
-        </div>
     );
 }

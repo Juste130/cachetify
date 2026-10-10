@@ -1,7 +1,6 @@
 ﻿"use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { AppSidebar } from "../layout/app-sidebar";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { StatCard } from "../ui/stat-card";
@@ -128,9 +127,7 @@ export function DashboardPage() {
   });
 
   return (
-    <div className="flex min-h-screen bg-muted">
-      <AppSidebar />
-
+    <>
       <main className="flex-1 p-4 sm:p-6 md:p-8 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -371,6 +368,6 @@ export function DashboardPage() {
         )}
       </main>
       <IdentityVerificationModal open={showVerifyModal} onClose={() => setShowVerifyModal(false)} />
-    </div>
+    </>
   );
 }
