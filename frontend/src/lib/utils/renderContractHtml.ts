@@ -115,7 +115,7 @@ export function renderContractToHtml(content: string, documentTitle: string): st
 <body>
   <div class="doc">
     ${bodyParts.join("\n    ")}
-    <p class="footer">Document généré et certifié par ContracTify — intégrité vérifiable par empreinte SHA-256.</p>
+    <p class="footer">Document généré et certifié par Cachetify — intégrité vérifiable par empreinte SHA-256.</p>
   </div>
 </body>
 </html>

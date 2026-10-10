@@ -92,7 +92,7 @@ export async function deployDraftContract(
     metadata.options?.allowDispute ?? true,
     "0",
     0,
-    "Contrat déployé depuis un brouillon ContracTify"
+    "Contrat déployé depuis un brouillon Cachetify"
   );
 
   // The backend independently verifies this transaction on-chain (receipt, event, creator

@@ -68,7 +68,7 @@ class EmailService {
                 <img src="${markUrl}" width="36" height="36" alt="" style="display: block;">
               </td>
               <td style="vertical-align: middle;">
-                <span style="color: #FFC107; font-size: 26px; font-weight: 700; letter-spacing: -0.01em;">ContracTify</span>
+                <span style="color: #FFC107; font-size: 26px; font-weight: 700; letter-spacing: -0.01em;">Cachetify</span>
               </td>
             </tr>
           </table>
@@ -89,7 +89,7 @@ class EmailService {
             </a>
           </div>` : ''}
           <p style="color: #8A8776; font-size: 12px; text-align: center; border-top: 1px solid #EDE9DB; padding-top: 20px; margin: 0; line-height: 1.6;">
-            ${footerNote || "Cet email a été envoyé automatiquement par ContracTify — si vous n'attendiez pas ce message, vous pouvez l'ignorer."}
+            ${footerNote || "Cet email a été envoyé automatiquement par Cachetify — si vous n'attendiez pas ce message, vous pouvez l'ignorer."}
           </p>
         </div>
       </div>
@@ -98,11 +98,11 @@ class EmailService {
 
   async sendWelcomeEmail(to, name) {
     const safeName = this.escapeHtml(name || '');
-    const subject = 'Bienvenue sur ContracTify';
+    const subject = 'Bienvenue sur Cachetify';
     const html = this._wrapEmail({
       heading: `Bienvenue ${safeName} !`,
       bodyHtml: `
-        <p style="color: #4B4B42; line-height: 1.7; margin-bottom: 16px;">Merci de vous être inscrit(e) sur ContracTify.</p>
+        <p style="color: #4B4B42; line-height: 1.7; margin-bottom: 16px;">Merci de vous être inscrit(e) sur Cachetify.</p>
         <p style="color: #4B4B42; line-height: 1.7; margin-bottom: 16px;">Vous pouvez maintenant créer et gérer vos contrats de manière sécurisée sur la blockchain.</p>
         <p style="color: #4B4B42; line-height: 1.7; margin-bottom: 28px;">Votre portefeuille numérique a été créé automatiquement et financé avec un peu de MATIC pour vos premières transactions.</p>
       `,
@@ -120,14 +120,14 @@ class EmailService {
       heading: `Bonjour ${safeName},`,
       bodyHtml: `
         <p style="color: #4B4B42; line-height: 1.7; margin-bottom: 8px;">
-          Vous avez été invité(e) à signer le contrat suivant sur ContracTify :
+          Vous avez été invité(e) à signer le contrat suivant sur Cachetify :
         </p>
       `,
       contractTitle: `${safeTitle}<p style="color: #8A8776; font-size: 12px; margin: 8px 0 0; font-family: monospace;">Réf: ${draftId.slice(0, 8)}...</p>`,
       ctaLabel: 'Créer mon compte et signer',
       ctaUrl: signupUrl,
       footerNote: `
-        Pour signer ce contrat, vous devez d'abord créer un compte gratuit sur ContracTify — un portefeuille numérique sécurisé vous sera automatiquement attribué.<br>
+        Pour signer ce contrat, vous devez d'abord créer un compte gratuit sur Cachetify — un portefeuille numérique sécurisé vous sera automatiquement attribué.<br>
         Votre signature aura valeur légale, conformément à la loi applicable à ce contrat.<br>
         Si vous n'attendiez pas cet email, vous pouvez l'ignorer.
       `,
@@ -137,13 +137,13 @@ class EmailService {
 
   async sendInvitationEmail(to, inviterName) {
     const safeInviter = this.escapeHtml(inviterName || '');
-    const subject = `${safeInviter} vous invite à rejoindre ContracTify`;
+    const subject = `${safeInviter} vous invite à rejoindre Cachetify`;
     const signupUrl = `${config.frontendUrl}/signup`;
     const html = this._wrapEmail({
-      heading: 'Vous êtes invité(e) sur ContracTify',
+      heading: 'Vous êtes invité(e) sur Cachetify',
       bodyHtml: `
         <p style="color: #4B4B42; line-height: 1.7; margin-bottom: 16px;">
-          <strong style="color: #212121;">${safeInviter}</strong> vous invite à créer un compte sur ContracTify pour échanger et signer des contrats en toute confiance.
+          <strong style="color: #212121;">${safeInviter}</strong> vous invite à créer un compte sur Cachetify pour échanger et signer des contrats en toute confiance.
         </p>
         <p style="color: #4B4B42; line-height: 1.7; margin-bottom: 16px;">
           La création de compte est gratuite et immédiate — un portefeuille numérique sécurisé vous sera automatiquement attribué pour signer vos contrats sur la blockchain.
@@ -151,7 +151,7 @@ class EmailService {
       `,
       ctaLabel: 'Créer mon compte',
       ctaUrl: signupUrl,
-      footerNote: "Cet email vous a été envoyé car quelqu'un vous a invité(e) sur ContracTify. Si vous ne connaissez pas cette personne, vous pouvez ignorer ce message.",
+      footerNote: "Cet email vous a été envoyé car quelqu'un vous a invité(e) sur Cachetify. Si vous ne connaissez pas cette personne, vous pouvez ignorer ce message.",
     });
     await this.sendEmail(to, subject, html);
   }

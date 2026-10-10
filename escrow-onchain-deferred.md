@@ -14,7 +14,7 @@ Le produit réel **ne les appelle plus jamais**. Le séquestre est passé entiè
 
 ## Le risque, tel qu'il est aujourd'hui
 
-Ces trois fonctions restent appelables directement par n'importe quel `onlyParticipant` d'un contrat actif — via Polygonscan, un script, ou un ancien tutoriel obsolète — en dehors de toute interface ContracTify. Concrètement : un participant pourrait envoyer de vrais MATIC dans `depositEscrow` sans que ni l'app ni le support n'en aient connaissance ou ne sachent y répondre. Le risque est jugé **faible** (il faut le vouloir, ou suivre une documentation périmée) mais **réel**.
+Ces trois fonctions restent appelables directement par n'importe quel `onlyParticipant` d'un contrat actif — via Polygonscan, un script, ou un ancien tutoriel obsolète — en dehors de toute interface Cachetify. Concrètement : un participant pourrait envoyer de vrais MATIC dans `depositEscrow` sans que ni l'app ni le support n'en aient connaissance ou ne sachent y répondre. Le risque est jugé **faible** (il faut le vouloir, ou suivre une documentation périmée) mais **réel**.
 
 ## Décision
 
@@ -28,4 +28,4 @@ Ces trois fonctions restent appelables directement par n'importe quel `onlyParti
 1. **Retirer** ces fonctions dans un nouveau contrat (la version la plus simple, si le séquestre reste fiat à long terme).
 2. **Les intégrer réellement** au produit (un vrai second mode "séquestre crypto natif", si la demande le justifie un jour) — auquel cas elles ont déjà l'essentiel de la logique nécessaire.
 
-Origine du constat : `audit-contractify-justedev-v6-complet.md`, module « Smart contracts — dérive entre le code et le produit réel ».
+Origine du constat : `audit-cachetify-justedev-v6-complet.md`, module « Smart contracts — dérive entre le code et le produit réel ».

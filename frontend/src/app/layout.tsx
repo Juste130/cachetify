@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ContracTify",
+  title: "Cachetify",
   description: "Secure Digital Contract Management on Blockchain",
 };
 

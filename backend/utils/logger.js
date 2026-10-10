@@ -11,7 +11,7 @@ const logFormat = winston.format.combine(
 const logger = winston.createLogger({
     level: config.logLevel,
     format: logFormat,
-    defaultMeta: { service: 'contractify-backend' },
+    defaultMeta: { service: 'cachetify-backend' },
     transports: [
         // Console transport
         new winston.transports.Console({

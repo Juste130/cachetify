@@ -7,6 +7,10 @@ interface PDFData {
     sha256Hash: string;
     contractId?: number;
     draftId?: string;
+    /** Jeton public non devinable (publicToken) : c'est vers /verify/<publicToken> que pointe
+     *  le code QR, jamais vers contractId ni draftId — voir mémoire, chapitre 2, section
+     *  Sécurité et protection des données. */
+    publicToken?: string;
     /** The type segment used to build the file name ("CDI", "Bail commercial"...) — the same
      *  concept as contract.metadata.type, kept separate from the full `title` string so the
      *  file name can be rebuilt from its actual parts (type, parties, date, reference)
@@ -25,14 +29,9 @@ interface PDFData {
     /** True for an imported document (vs. AI-generated) — see the branch below: an
      *  imported PDF's actual content is never reproduced here (reformatting a third-party
      *  legal document risks introducing a discrepancy with what was actually signed), and
-     *  the "sha256Hash" field for one is really an IPFS CID, not a raw hex digest — both
-     *  need different handling from the AI-generated case. */
+     *  the "sha256Hash" field for one is really our internal storage reference, not a raw hex
+     *  digest — both need different handling from the AI-generated case. */
     isExternalPdf?: boolean;
-    /** Direct link to the original imported file on IPFS — only meaningful when isExternalPdf.
-     *  Printed on the certificate as a permanent, provider-independent reference; NOT what
-     *  this module fetches to build the merged download (see proxyUrl below) — a public
-     *  gateway may not send CORS headers permitting this app's origin to read the response. */
-    ipfsUrl?: string;
     /** This app's own authenticated, same-origin proxy for the original file
      *  (ipfsApi.getProxyUrl) — only meaningful when isExternalPdf. Used to actually fetch the
      *  original document's bytes so they can be merged with the certificate below into one
@@ -41,12 +40,35 @@ interface PDFData {
      *  policy. */
     proxyUrl?: string;
     /** True when the import-time analysis (create-contract-page.tsx) flagged that this file
-     *  already looked signed before it was ever uploaded to ContracTify — see the dated
+     *  already looked signed before it was ever uploaded to Cachetify — see the dated
      *  disclaimer this triggers below. Only meaningful when isExternalPdf. */
     priorSignatureDetected?: boolean;
 }
 
-export async function generateCertifiedPDF(data: PDFData) {
+/**
+ * Déclenche le téléchargement de `bytes` sous le nom `fileName` — séparé de
+ * buildCertificatePdfBytes ci-dessous pour que le dépôt automatique du certificat (voir
+ * contract-details-page.tsx) puisse obtenir les octets SANS déclencher de téléchargement.
+ */
+export function downloadBytes(bytes: Uint8Array, fileName: string): void {
+    // See the matching comment in hash.ts's computeBytesSHA256 — same TS/DOM typing papercut.
+    const blobUrl = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: "application/pdf" }));
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(blobUrl);
+}
+
+/**
+ * Construit le certificat (et, pour un import, le fusionne avec le document original) et
+ * renvoie ses octets bruts — sans jamais déclencher de téléchargement. C'est cette fonction
+ * que le dépôt automatique du certificat officiel appelle (voir contract-details-page.tsx) :
+ * elle a besoin des octets pour calculer leur empreinte et les envoyer au serveur, pas
+ * d'un fichier posé sur le disque de l'utilisateur. generateCertifiedPDF, plus bas,
+ * l'utilise aussi pour le téléchargement manuel — un seul et même PDF dans les deux cas.
+ */
+export async function buildCertificatePdfBytes(data: PDFData): Promise<{ bytes: Uint8Array; fileName: string }> {
     // Dynamically import jsPDF to avoid Next.js server-side 'core-js' / 'canvg' errors
     const { jsPDF } = await import("jspdf");
     
@@ -140,11 +162,11 @@ export async function generateCertifiedPDF(data: PDFData) {
     // header (~1.6:1) — worse here on a document meant to be printed/read in grayscale. Ink
     // (#212121, the app's own dark-text token) is what a certified document's letterhead
     // should look like anyway: legible, printer-safe, and it's already the exact color used
-    // for the destination heading of the "Bientôt disponible"-free parts of ContracTify's own UI.
+    // for the destination heading of the "Bientôt disponible"-free parts of Cachetify's own UI.
     doc.setTextColor(33, 33, 33);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(22);
-    doc.text("ContracTify", margin, yPos);
+    doc.text("Cachetify", margin, yPos);
     doc.setTextColor(100, 100, 100);
     doc.setFontSize(9);
     doc.setFont("helvetica", "normal");
@@ -173,13 +195,8 @@ export async function generateCertifiedPDF(data: PDFData) {
         checkPageBreak(10);
         addText(data.title, 12, true, [30, 30, 30]);
         yPos += 6;
-        addText("Le document original, tel qu'importé, reste disponible intégralement via son identifiant IPFS ci-dessous — ce certificat n'en est pas une copie ni un résumé.", 9, false, [90, 90, 90]);
-        if (data.ipfsUrl) {
-            yPos += 4;
-            checkPageBreak(10);
-            addText(data.ipfsUrl, 9, false, [33, 150, 243]);
-        }
-        // The blockchain anchor date below is when ContracTify's signature transaction was
+        addText("Le document original, tel qu'importé, est joint intégralement à la suite de ce certificat — ce certificat n'en est pas une copie ni un résumé.", 9, false, [90, 90, 90]);
+        // The blockchain anchor date below is when Cachetify's signature transaction was
         // recorded — for a document that already carried a signature/date before it was ever
         // imported, that is NOT the same as the date the parties actually signed on paper (or
         // elsewhere). Conflating the two on a certificate meant to prove authenticity would be
@@ -187,7 +204,7 @@ export async function generateCertifiedPDF(data: PDFData) {
         if (data.priorSignatureDetected) {
             yPos += 6;
             checkPageBreak(14);
-            addText("Ce document semblait déjà porter une signature avant son import sur ContracTify. La date d'ancrage blockchain ci-dessous correspond à la date de cet ancrage — pas nécessairement à la date de signature originale indiquée sur le document lui-même, qu'il convient de vérifier directement dans le fichier ci-dessus.", 8, false, [180, 100, 20]);
+            addText("Ce document semblait déjà porter une signature avant son import sur Cachetify. La date d'ancrage blockchain ci-dessous correspond à la date de cet ancrage — pas nécessairement à la date de signature originale indiquée sur le document lui-même, qu'il convient de vérifier directement dans le fichier ci-dessus.", 8, false, [180, 100, 20]);
         }
     } else if (data.content) {
         const lines = data.content.split('\n');
@@ -278,17 +295,14 @@ export async function generateCertifiedPDF(data: PDFData) {
 
     addText("CERTIFICAT D'INTÉGRITÉ NUMÉRIQUE", 8, true, [130, 130, 130]);
     yPos += 1;
-    // The hash/CID is a single long unbroken token — exactly the case addText's
+    // The hash is a single long unbroken token — exactly the case addText's
     // breakLongTokens() exists for; a raw doc.text() call here (the previous code) had no
     // width constraint at all and ran straight off the page edge.
     //
-    // For an imported PDF, `sha256Hash` actually holds the IPFS CID (a different kind of
-    // content identifier, not a raw hex SHA-256 digest) — labeling it "SHA-256" here would
-    // mislead anyone trying to verify it by literally hashing the file themselves.
-    addText(
-        data.isExternalPdf ? `Identifiant IPFS (CID) : ${data.sha256Hash}` : `Empreinte SHA-256 : ${data.sha256Hash}`,
-        8, false, [130, 130, 130]
-    );
+    // Toujours la vraie empreinte SHA-256 du fichier (jamais notre référence de stockage
+    // interne), qu'il soit importé ou rédigé par l'IA — c'est cette même valeur que la page
+    // publique de vérification compare avec le fichier déposé par un tiers.
+    addText(`Empreinte SHA-256 : ${data.sha256Hash}`, 8, false, [130, 130, 130]);
     if (data.contractId) {
         addText(`Ancrage Blockchain : Polygon Amoy (ID: ${data.contractId})`, 8, false, [130, 130, 130]);
     } else {
@@ -299,8 +313,8 @@ export async function generateCertifiedPDF(data: PDFData) {
     // Precisely what the blockchain transaction proves, spelled out rather than left
     // implicit — it attests which wallet transacted and when, not a cryptographic signature
     // of the document's content by that wallet; content integrity is what the fingerprint
-    // above and its IPFS anchor establish.
-    addText("Portée de la preuve : la transaction blockchain atteste qu'un portefeuille identifié a validé ce contrat à l'horodatage indiqué. L'intégrité du contenu repose sur l'empreinte ci-dessus et son ancrage IPFS.", 7, false, [150, 150, 150]);
+    // above, ancrée sur la blockchain, établit.
+    addText("Portée de la preuve : la transaction blockchain atteste qu'un portefeuille identifié a validé ce contrat à l'horodatage indiqué. L'intégrité du contenu repose sur l'empreinte ci-dessus, elle-même inscrite sur la blockchain.", 7, false, [150, 150, 150]);
     yPos += 4;
     // Factually true only for an AI-generated contract — an imported document was never
     // drafted by the platform's AI, saying otherwise here would be a false statement on a
@@ -309,10 +323,12 @@ export async function generateCertifiedPDF(data: PDFData) {
         addText("Ce contrat a été rédigé avec l'assistance d'une intelligence artificielle. Il ne constitue pas un avis juridique.", 7, false, [150, 150, 150]);
     }
 
-    // QR Code — points to the public, unauthenticated verification page (no ContracTify
+    // QR Code — points to the public, unauthenticated verification page (no Cachetify
     // account needed to scan and confirm this certificate), not the private contract page.
+    // Always publicToken (never contractId/draftId, both guessable/enumerable) — see the
+    // Sécurité et protection des données section of the mémoire.
     try {
-        const verifyUrl = `${window.location.origin}/verify/${data.contractId || data.draftId}`;
+        const verifyUrl = `${window.location.origin}/verify/${data.publicToken || data.contractId || data.draftId}`;
         const qrDataUrl = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 80 });
         doc.addImage(qrDataUrl, "PNG", pageWidth - margin - 28, yPos - 16, 28, 28);
     } catch (e) {
@@ -331,18 +347,17 @@ export async function generateCertifiedPDF(data: PDFData) {
     });
 
     // For an AI-generated contract the certificate already IS the full document (its content
-    // was reproduced above) — nothing to merge it with, save it as-is like before.
+    // was reproduced above) — nothing to merge it with, its own bytes are the result.
     if (!data.isExternalPdf || !data.proxyUrl) {
-        doc.save(`${fileBaseName}.pdf`);
-        return;
+        return { bytes: new Uint8Array(doc.output("arraybuffer") as ArrayBuffer), fileName: `${fileBaseName}.pdf` };
     }
 
     // For an imported PDF, hand back one single file — the original pages followed by this
     // certificate page(s) — instead of a bare certificate that forces the reader to go find
     // the original document separately. This never touches the original file's own bytes or
     // its certified hash (still checked/compared exactly as before at signing time,
-    // elsewhere) — it's a client-side, on-demand convenience export assembled fresh from two
-    // already-verified pieces, not a new artifact stored or hashed anywhere.
+    // elsewhere) — it's assembled fresh from two already-verified pieces, not a new artifact
+    // stored or hashed anywhere by this function itself.
     try {
         const [{ PDFDocument }, originalRes] = await Promise.all([
             import("pdf-lib"),
@@ -362,18 +377,22 @@ export async function generateCertifiedPDF(data: PDFData) {
             merged.addPage(page);
         }
 
-        const mergedBytes = await merged.save();
-        const blobUrl = URL.createObjectURL(new Blob([mergedBytes], { type: "application/pdf" }));
-        const link = document.createElement("a");
-        link.href = blobUrl;
-        link.download = `${fileBaseName}.pdf`;
-        link.click();
-        URL.revokeObjectURL(blobUrl);
+        return { bytes: await merged.save(), fileName: `${fileBaseName}.pdf` };
     } catch (error) {
-        // Original document unreachable (network hiccup, gateway down) — fall back to the
-        // certificate alone rather than leaving the user with no download at all. The
-        // certificate already points to the original document's IPFS address.
-        console.error("Failed to merge original document with certificate, downloading certificate only:", error);
-        doc.save(`${fileBaseName}.pdf`);
+        // Original document unreachable (network hiccup, server down) — fall back to the
+        // certificate alone rather than leaving the caller with nothing at all.
+        console.error("Failed to merge original document with certificate, using certificate only:", error);
+        return { bytes: new Uint8Array(doc.output("arraybuffer") as ArrayBuffer), fileName: `${fileBaseName}.pdf` };
     }
+}
+
+/**
+ * Génère le certificat ET le télécharge immédiatement — utilisé par le bouton de
+ * téléchargement manuel (contract-details-page.tsx). Le dépôt automatique du certificat
+ * officiel, lui, appelle buildCertificatePdfBytes directement : il a besoin des octets, pas
+ * d'un fichier pose sur le disque de l'utilisateur.
+ */
+export async function generateCertifiedPDF(data: PDFData): Promise<void> {
+    const { bytes, fileName } = await buildCertificatePdfBytes(data);
+    downloadBytes(bytes, fileName);
 }

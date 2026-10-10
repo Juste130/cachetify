@@ -74,7 +74,7 @@ contract ContractNFT is ERC721, Ownable, ReentrancyGuard, IERC5192 {
      * @dev Repoints tokenURI() at a new metadata backend — e.g. after a domain change —
      * without requiring a redeploy of this contract.
      * @param newBaseTokenURI Full prefix metadata requests are built from, expected to end in
-     * a trailing slash (e.g. "https://api.contractify.io/api/nft/") so that appending the
+     * a trailing slash (e.g. "https://api.cachetify.io/api/nft/") so that appending the
      * token id alone yields a valid URL.
      */
     function setBaseTokenURI(string calldata newBaseTokenURI) external onlyMetadataAdmin {

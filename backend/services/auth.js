@@ -11,7 +11,7 @@ const { UnauthorizedError, ForbiddenError } = require('../utils/errors');
 /**
  * Vérifie si un email fait partie de la whitelist des administrateurs.
  * La liste est définie dans la variable d'env ADMIN_EMAILS (séparées par des virgules).
- * Exemple : ADMIN_EMAILS=admin@contractify.io,cto@contractify.io
+ * Exemple : ADMIN_EMAILS=admin@cachetify.io,cto@cachetify.io
  * @param {string} email
  * @returns {boolean}
  */
@@ -243,7 +243,7 @@ class AuthService {
                             emailService.sendGenericNotification(
                                 draft.user.email,
                                 'Contrat prêt à être déployé',
-                                `Tous les signataires de "${draft.title}" ont désormais un compte sur ContracTify. Vous pouvez déployer le contrat sur la blockchain pour lancer les signatures.`,
+                                `Tous les signataires de "${draft.title}" ont désormais un compte sur Cachetify. Vous pouvez déployer le contrat sur la blockchain pour lancer les signatures.`,
                                 draft.id
                             ).catch(err => logger.error(`[Email] Failed to send ready-to-deploy notice for draft ${draftId}:`, err));
                         }

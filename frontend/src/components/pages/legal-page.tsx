@@ -40,7 +40,7 @@ function IncompleteBadge({ className = "" }: { className?: string }) {
 
 /**
  * Shared shell for the /legal/* pages. These are placeholders, not finished legal documents —
- * ContracTify had no Terms of Service, Privacy Policy, or Mentions légales at all before this
+ * Cachetify had no Terms of Service, Privacy Policy, or Mentions légales at all before this
  * page existed (a real gap for a platform producing legally binding contracts and collecting
  * PII). The honest fix is to say so plainly rather than publish AI-drafted text as if a lawyer
  * had reviewed it; each page's own sections state what governs the platform for now and what
@@ -74,7 +74,7 @@ export function LegalPage({ title, updatedAt, sections }: LegalPageProps) {
           <AlertTriangle className="w-5 h-5 text-[#FFC107] shrink-0 mt-0.5" />
           <p className="text-sm text-muted-foreground leading-relaxed">
             Ce document est en cours de rédaction par un professionnel du droit et n'a pas encore
-            été formellement validé. Il reflète l'intention actuelle de ContracTify, mais ne doit
+            été formellement validé. Il reflète l'intention actuelle de Cachetify, mais ne doit
             pas être considéré comme définitif tant que cette mention n'aura pas été retirée.
             {incompleteCount > 0 && (
               <>

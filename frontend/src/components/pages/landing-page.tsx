@@ -46,7 +46,7 @@ export function LandingPage() {
     {
       step: "3",
       title: "Sécurisation Blockchain",
-      description: "Votre contrat et ses signatures sont ancrés sur la blockchain et stockés sur IPFS pour garantir leur immuabilité."
+      description: "Votre contrat est chiffré et conservé en sécurité ; son empreinte et ses signatures sont ancrées sur la blockchain pour garantir leur intégrité."
     }
   ];
 
@@ -107,7 +107,7 @@ export function LandingPage() {
           </div>
 
           <div className="mt-14 flex justify-center">
-            {/* A generic stock photo mislabeled "Dashboard ContracTify" used to sit here — not
+            {/* A generic stock photo mislabeled "Dashboard Cachetify" used to sit here — not
                 an actual screenshot of the product, and full-width enough to dominate the hero.
                 This is an honest illustration instead: it doesn't claim to be product UI, and
                 stays a supporting visual rather than the first thing a visitor's eye lands on. */}
@@ -144,7 +144,7 @@ export function LandingPage() {
       <section id="features" className="py-20 bg-muted px-4 sm:px-6 lg:px-8">
         <div className="container mx-auto max-w-6xl">
           <div className="text-center mb-12">
-            <h2 className="mb-4">Pourquoi choisir ContracTify ?</h2>
+            <h2 className="mb-4">Pourquoi choisir Cachetify ?</h2>
             <p className="text-muted-foreground max-w-2xl mx-auto">
               Une solution complète pour transformer votre gestion de contrats
             </p>
@@ -276,7 +276,7 @@ export function LandingPage() {
           <div className="text-center mb-12">
             <h2 className="mb-4">Questions fréquentes</h2>
             <p className="text-muted-foreground">
-              Tout ce que vous devez savoir sur ContracTify
+              Tout ce que vous devez savoir sur Cachetify
             </p>
           </div>
 
@@ -300,7 +300,7 @@ export function LandingPage() {
             Prêt à simplifier vos contrats ?
           </h2>
           <p className="text-[#212121]/80 text-xl mb-8">
-            Rejoignez les entreprises et indépendants qui font confiance à ContracTify
+            Rejoignez les entreprises et indépendants qui font confiance à Cachetify
           </p>
           <Link href="/signup">
             <Button

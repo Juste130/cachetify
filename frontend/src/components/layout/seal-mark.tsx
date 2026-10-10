@@ -1,5 +1,5 @@
 /**
- * "Le Sceau" — ContracTify's reduced mark, reproduced at the exact geometry and colors from
+ * "Le Sceau" — Cachetify's reduced mark, reproduced at the exact geometry and colors from
  * the concept artifact (circle r=100 on a 240 viewBox, 12-dot pearled border at r=84, ring
  * r=54/stroke-width=22 cut open on the right, closed by a seal-flourish dot). Shared by every
  * place the mark+wordmark lockup appears (sidebar, landing header) so they stay pixel-identical

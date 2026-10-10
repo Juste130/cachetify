@@ -33,13 +33,13 @@ function renderCertificateSvg({ tokenId, title, timestamp, isActive, signerCount
     const shortHash = escapeXml(truncate(ipfsHash || '', 30));
     const signerLabel = `${signerCount} signataire${signerCount > 1 ? 's' : ''} enregistré${signerCount > 1 ? 's' : ''}`;
 
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600" role="img" aria-label="Certificat de signature ContracTify">
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600" role="img" aria-label="Certificat de signature Cachetify">
   <rect width="600" height="600" fill="#182238"/>
   <rect x="24" y="24" width="552" height="552" rx="6" fill="none" stroke="#A9701B" stroke-width="1.5"/>
   <rect x="40" y="40" width="520" height="520" rx="3" fill="none" stroke="#33405E" stroke-width="1"/>
 
   <text x="300" y="108" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="15" letter-spacing="4" fill="#E2A959">CERTIFICAT DE SIGNATURE</text>
-  <text x="300" y="136" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12" fill="#AEB6CC">ContracTify · Preuve ancrée sur Polygon</text>
+  <text x="300" y="136" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="12" fill="#AEB6CC">Cachetify · Preuve ancrée sur Polygon</text>
 
   <line x1="140" y1="168" x2="460" y2="168" stroke="#33405E" stroke-width="1"/>
 
@@ -54,7 +54,7 @@ function renderCertificateSvg({ tokenId, title, timestamp, isActive, signerCount
   <line x1="140" y1="456" x2="460" y2="456" stroke="#33405E" stroke-width="1"/>
   <text x="300" y="480" text-anchor="middle" font-family="'Courier New', monospace" font-size="10.5" fill="#767E92">${shortHash}</text>
 
-  <text x="300" y="548" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="11.5" fill="#767E92">Vérifiable publiquement, indépendamment de ContracTify</text>
+  <text x="300" y="548" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-style="italic" font-size="11.5" fill="#767E92">Vérifiable publiquement, indépendamment de Cachetify</text>
 </svg>`;
 }
 

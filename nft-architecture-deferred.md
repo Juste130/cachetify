@@ -30,7 +30,7 @@ Un NFT par contrat, pas un NFT par personne — le token représente l'identité
 
 **Ce qui existe déjà et satisfait cette description, vérifié dans le code actuel :** le NFT reste unique (`ContractData.nftTokenId`, un seul par contrat), et sa fiche de preuve (`getNFTProof(contractId)`/`getContractProof(tokenId)`) est une fonction `view` interrogeable par n'importe qui, pas réservée au propriétaire. Côté app, `contract.metadata.nftTokenId` fait partie du cache (`ContractCache`) lu via `hasContractAccess` — vrai pour le créateur, **et pour chaque signataire, et pour un admin**. Résultat déjà vérifié : sur `contract-details-page.tsx`, chaque signataire qui ouvre le contrat voit exactement le même composant `NFTViewer`/`NFTCard`, pointant vers le même tokenId, affichant les mêmes données de preuve. C'est déjà "ce NFT visible chez eux tous," dans l'application.
 
-**Tranché avec le porteur de projet :** "visible chez eux tous" veut dire visible dans l'app ContracTify — déjà vrai, vérifié ci-dessus, rien à construire. La visibilité dans le portefeuille externe de chaque signataire (MetaMask, etc.) aurait nécessité un passage à ERC-1155 (jeton semi-fongible : un même id, un solde par adresse) ; explicitement écartée pour l'instant.
+**Tranché avec le porteur de projet :** "visible chez eux tous" veut dire visible dans l'app Cachetify — déjà vrai, vérifié ci-dessus, rien à construire. La visibilité dans le portefeuille externe de chaque signataire (MetaMask, etc.) aurait nécessité un passage à ERC-1155 (jeton semi-fongible : un même id, un solde par adresse) ; explicitement écartée pour l'instant.
 
 ## Décision
 

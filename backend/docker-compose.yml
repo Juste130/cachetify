@@ -4,12 +4,12 @@ services:
   # PostgreSQL Database
   postgres:
     image: postgres:15-alpine
-    container_name: contractify-postgres
+    container_name: cachetify-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: contractify
+      POSTGRES_DB: cachetify
     ports:
       - "5433:5432"
     volumes:
@@ -25,13 +25,13 @@ services:
   #   build:
   #     context: .
   #     dockerfile: Dockerfile
-  #   container_name: contractify-backend
+  #   container_name: cachetify-backend
   #   restart: unless-stopped
   #   ports:
   #     - "3001:3001"
   #   environment:
   #     NODE_ENV: development
-  #     DATABASE_URL: postgresql://postgres:password@postgres:5432/contractify
+  #     DATABASE_URL: postgresql://postgres:password@postgres:5432/cachetify
   #   depends_on:
   #     postgres:
   #       condition: service_healthy

@@ -1,4 +1,4 @@
-# Stratégie financière — ContracTify
+# Stratégie financière — Cachetify
 
 > Document de travail interne. Rédigé le 30 août 2026. Complète la note stratégique business
 > complète (marché, concurrence, institutions, positionnement, feuille de route) publiée en
@@ -238,5 +238,5 @@ institutionnel/juridique (relations DGI/OTR/DGID).
 - Pitch deck investisseurs (15 slides) — publié en artifact, même remarque.
 
 *Document rédigé avec l'assistance de Claude (Anthropic) sur la base du code et des choix
-produit réels de ContracTify, croisés avec une recherche documentaire ciblée. À faire réviser
+produit réels de Cachetify, croisés avec une recherche documentaire ciblée. À faire réviser
 par un conseil juridique et comptable local avant tout usage face à des investisseurs.*

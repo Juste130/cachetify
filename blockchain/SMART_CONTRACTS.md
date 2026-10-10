@@ -1,4 +1,4 @@
-# Résumé des Smart Contracts — Contractify
+# Résumé des Smart Contracts — Cachetify
 
 Ce document explique, en français simple, ce que fait chaque fonction des deux smart contracts du projet : **ContractManager** (le cerveau : gère les contrats, signatures, escrow, litiges...) et **ContractNFT** (le certificat : mint un NFT de preuve quand un contrat est finalisé).
 

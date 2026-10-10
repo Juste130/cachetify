@@ -1,6 +1,6 @@
 # Suivi des audits — points ouverts et reportés
 
-Ce document remplace les quatre audits historiques `audit-contractify-justedev-v3.md`, `v4.md`, `v5-import-signature.md` et `v6-complet.md` (supprimés — contenu intégral toujours consultable dans l'historique git). Ces audits couvraient plusieurs dizaines de points ; la grande majorité a été vérifiée comme **réellement corrigée dans le code actuel** (pas seulement déclarée corrigée) lors du nettoyage de ce document. Ce fichier ne garde que ce qui reste réellement à faire ou volontairement en attente, pour éviter que quatre documents largement obsolètes noient les vrais points ouverts.
+Ce document remplace les quatre audits historiques `audit-cachetify-justedev-v3.md`, `v4.md`, `v5-import-signature.md` et `v6-complet.md` (supprimés — contenu intégral toujours consultable dans l'historique git). Ces audits couvraient plusieurs dizaines de points ; la grande majorité a été vérifiée comme **réellement corrigée dans le code actuel** (pas seulement déclarée corrigée) lors du nettoyage de ce document. Ce fichier ne garde que ce qui reste réellement à faire ou volontairement en attente, pour éviter que quatre documents largement obsolètes noient les vrais points ouverts.
 
 Dernière vérification : lecture directe du code (grep + lecture de fichiers), pas une supposition — chaque ligne ci-dessous a été confirmée absente/présente dans le code au moment de la rédaction.
 
@@ -20,7 +20,7 @@ Ces deux points sont les plus sérieux de tout le suivi d'audit : ils bloquent u
 - **`tar` critique côté backend** — laissé de côté volontairement pour compatibilité `bcrypt`/`node-pre-gyp`, toujours vrai aujourd'hui, à surveiller.
 - **Portée réelle de la preuve `signContract()` non documentée pour l'utilisateur** — le smart contract prouve "qui a transigé quand", pas une signature cryptographique du contenu du document (le lien passe par le hash déclaré par le créateur, jamais recontrôlé on-chain). Pas de correction de code nécessaire, juste un ajout de texte explicatif dans le certificat PDF (`pdfGenerator.ts`) et/ou une page `/legal/*`.
 - Aucune journalisation d'IP/user-agent au moment de la signature (`syncContract` post-signature) — renforcerait le faisceau de preuve en cas de litige, non bloquant, à évaluer avec le juriste en même temps que les points juridiques ci-dessus.
-- **`inviteUser` utilisable comme relais de spam/phishing ciblé** — n'importe quel compte authentifié (inscription Privy libre) peut faire envoyer un email "invitation ContracTify" à n'importe quelle adresse tierce. Limité à 1/adresse/24h + quota global par compte, donc pas un vecteur de masse, mais reste un abus possible à faible échelle. Risque accepté pour l'instant, à revoir si abus constaté.
+- **`inviteUser` utilisable comme relais de spam/phishing ciblé** — n'importe quel compte authentifié (inscription Privy libre) peut faire envoyer un email "invitation Cachetify" à n'importe quelle adresse tierce. Limité à 1/adresse/24h + quota global par compte, donc pas un vecteur de masse, mais reste un abus possible à faible échelle. Risque accepté pour l'instant, à revoir si abus constaté.
 
 ## 🟡 Mineurs — tous résolus depuis la dernière passe
 

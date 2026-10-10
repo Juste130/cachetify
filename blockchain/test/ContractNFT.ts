@@ -306,8 +306,8 @@ describe("ContractNFT", function () {
       // owner() est ContractManager depuis le transfert d'ownership du beforeEach — le
       // metadataAdmin reste le déployeur (owner ici, cf. constructeur), un rôle
       // volontairement distinct pour ne pas dépendre d'un passthrough côté ContractManager.
-      await contractNFT.connect(owner).setBaseTokenURI("https://cdn.contractify.io/api/nft/");
-      expect(await contractNFT.tokenURI(1)).to.equal("https://cdn.contractify.io/api/nft/1");
+      await contractNFT.connect(owner).setBaseTokenURI("https://cdn.cachetify.io/api/nft/");
+      expect(await contractNFT.tokenURI(1)).to.equal("https://cdn.cachetify.io/api/nft/1");
     });
 
     it("Devrait refuser le changement de base URI à quelqu'un d'autre que le metadataAdmin", async function () {

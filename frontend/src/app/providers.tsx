@@ -51,7 +51,7 @@ export default function Providers({ children }: { children: ReactNode }) {
           theme: '#212121',
           accentColor: '#FFC107',
           logo: '/mark-seal.svg',
-          landingHeader: 'Connexion à ContracTify',
+          landingHeader: 'Connexion à Cachetify',
         },
         mfa: {
           noPromptOnMfaRequired: false,
