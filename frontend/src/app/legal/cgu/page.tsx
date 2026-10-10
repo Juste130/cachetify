@@ -6,15 +6,15 @@ const sections: LegalSection[] = [
     title: "1. Objet",
     content: (
       <p>
-        Les présentes conditions régissent l'accès et l'utilisation de ContracTify, un service de
+        Les présentes conditions régissent l'accès et l'utilisation de Cachetify, un service de
         création, signature électronique et archivage de contrats s'appuyant sur une intelligence
         artificielle et sur le réseau blockchain Polygon.
       </p>
     ),
   },
   {
-    id: "ce-que-contractify-fait",
-    title: "2. Ce que ContracTify fait — et ne fait pas",
+    id: "ce-que-cachetify-fait",
+    title: "2. Ce que Cachetify fait — et ne fait pas",
     content: (
       <>
         <p>
@@ -23,14 +23,14 @@ const sections: LegalSection[] = [
           professionnel du droit, en particulier pour un engagement à enjeu significatif.
         </p>
         <p>
-          La signature réalisée sur ContracTify confirme l'identité de l'utilisateur via son compte
+          La signature réalisée sur Cachetify confirme l'identité de l'utilisateur via son compte
           et son portefeuille numérique déjà connectés à la session ; elle ne constitue pas une
           vérification d'identité par pièce officielle. La valeur juridique de cette signature
           dépend du cadre légal applicable dans le pays du contrat concerné.
         </p>
         <p>
           L'ancrage blockchain assure l'horodatage et l'intégrité du document signé (toute
-          modification ultérieure du texte est détectable). ContracTify fonctionne actuellement sur
+          modification ultérieure du texte est détectable). Cachetify fonctionne actuellement sur
           Polygon Amoy, un réseau de test public, en amont d'un déploiement sur le réseau principal.
         </p>
       </>
@@ -55,9 +55,9 @@ const sections: LegalSection[] = [
         La fonctionnalité de séquestre de fonds entre parties, lorsqu'elle est proposée dans un
         contrat, n'est pas encore active en production à la date de cette page : aucun fonds réel
         n'est aujourd'hui déplacé via cette fonctionnalité. Le signalement d'un litige sur un
-        contrat suspend, côté ContracTify, la libération automatique ou anticipée d'un séquestre
+        contrat suspend, côté Cachetify, la libération automatique ou anticipée d'un séquestre
         associé, en attendant sa résolution. La résolution d'un litige signalé est examinée par
-        l'équipe ContracTify ; elle ne constitue pas une décision arbitrale ou judiciaire.
+        l'équipe Cachetify ; elle ne constitue pas une décision arbitrale ou judiciaire.
       </p>
     ),
   },
@@ -66,7 +66,7 @@ const sections: LegalSection[] = [
     title: "5. Résiliation et suspension",
     content: (
       <p>
-        ContracTify peut suspendre l'accès à la plateforme en cas d'incident technique ou de
+        Cachetify peut suspendre l'accès à la plateforme en cas d'incident technique ou de
         sécurité affectant l'ensemble du service. Cette suspension est distincte de la résiliation
         d'un contrat individuel entre utilisateurs, qui reste régie par les clauses propres à ce
         contrat. Un utilisateur peut demander la clôture de son compte à tout moment ; les contrats
@@ -80,8 +80,8 @@ const sections: LegalSection[] = [
     title: "6. Propriété du contenu généré",
     content: (
       <p>
-        Le texte d'un contrat généré ou modifié par l'utilisateur via ContracTify lui appartient.
-        ContracTify ne revendique aucun droit sur le contenu des contrats créés par ses
+        Le texte d'un contrat généré ou modifié par l'utilisateur via Cachetify lui appartient.
+        Cachetify ne revendique aucun droit sur le contenu des contrats créés par ses
         utilisateurs, et ne les exploite pas à d'autres fins que la fourniture du service
         (génération, signature, archivage, et amélioration technique du service lui-même).
       </p>
@@ -93,7 +93,7 @@ const sections: LegalSection[] = [
     incomplete: true,
     content: (
       <p>
-        ContracTify est un outil facilitant la création, la signature et l'archivage de contrats ;
+        Cachetify est un outil facilitant la création, la signature et l'archivage de contrats ;
         il n'est pas partie aux contrats conclus entre ses utilisateurs et n'intervient pas dans
         leur exécution. La portée exacte de cette limitation (cas d'exclusion, plafond éventuel,
         articulation avec le droit de la consommation applicable) doit être validée par un
@@ -107,7 +107,7 @@ const sections: LegalSection[] = [
     title: "8. Modification des présentes conditions",
     content: (
       <p>
-        ContracTify peut faire évoluer ces conditions, notamment pour refléter de nouvelles
+        Cachetify peut faire évoluer ces conditions, notamment pour refléter de nouvelles
         fonctionnalités (activation réelle de l'escrow, passage en réseau principal) ou une
         évolution du cadre légal. La date de dernière mise à jour, en haut de cette page, permet
         de suivre ces changements.
@@ -120,7 +120,7 @@ const sections: LegalSection[] = [
     incomplete: true,
     content: (
       <p>
-        À préciser selon les juridictions effectivement desservies par ContracTify (France et
+        À préciser selon les juridictions effectivement desservies par Cachetify (France et
         espace OHADA à ce jour) — un service multi-juridictions comme celui-ci doit clarifier avec
         un professionnel du droit si une loi et une juridiction uniques s'appliquent à tous les
         utilisateurs, ou si cela varie selon le pays du contrat concerné.

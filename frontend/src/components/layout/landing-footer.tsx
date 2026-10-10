@@ -6,7 +6,7 @@ export function LandingFooter() {
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
           <div>
-            <h3 className="text-[#FFC107] mb-4">ContracTify</h3>
+            <h3 className="text-[#FFC107] mb-4">Cachetify</h3>
             <p className="text-sm text-gray-400">
               Simplifiez la gestion de vos contrats avec l'IA.
             </p>
@@ -15,9 +15,9 @@ export function LandingFooter() {
           <div>
             <h4 className="mb-4">Produit</h4>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li><a href="/#features" className="hover:text-[#FFC107]">Fonctionnalités</a></li>
-              <li><a href="/how-it-works" className="hover:text-[#FFC107]">Comment ça marche</a></li>
-              <li><a href="/#faq" className="hover:text-[#FFC107]">Sécurité</a></li>
+              <li><Link href="/#features" className="hover:text-[#FFC107]">Fonctionnalités</Link></li>
+              <li><Link href="/how-it-works" className="hover:text-[#FFC107]">Comment ça marche</Link></li>
+              <li><Link href="/#faq" className="hover:text-[#FFC107]">Sécurité</Link></li>
             </ul>
           </div>
 
@@ -32,7 +32,7 @@ export function LandingFooter() {
         </div>
 
         <div className="pt-8 border-t border-gray-800 text-center text-sm text-gray-400">
-          <p>© {new Date().getFullYear()} ContracTify. Tous droits réservés.</p>
+          <p>© {new Date().getFullYear()} Cachetify. Tous droits réservés.</p>
         </div>
       </div>
     </footer>
