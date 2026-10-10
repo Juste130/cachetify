@@ -59,3 +59,13 @@ export const getContractNFT = (signerOrProvider: ethers.Signer | ethers.Provider
         signerOrProvider
     );
 };
+
+// Fournisseur en lecture seule, sans portefeuille connecté : c'est ce que la page publique de
+// vérification (/verify/[token]) utilise pour relire l'empreinte et les signatures
+// directement sur la blockchain depuis le navigateur, sans passer par notre serveur — voir
+// mémoire, chapitre 3. N'importe qui peut faire de même avec le RPC public et l'identifiant
+// du contrat, sans dépendre de ce site.
+export const getReadOnlyProvider = () => {
+    const rpcUrl = process.env.NEXT_PUBLIC_POLYGON_RPC_URL || 'https://rpc-amoy.polygon.technology';
+    return new ethers.JsonRpcProvider(rpcUrl);
+};

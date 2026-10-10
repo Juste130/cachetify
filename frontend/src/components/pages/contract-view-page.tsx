@@ -8,7 +8,7 @@ import { Loader2, AlertCircle, Shield, CheckCircle2 } from "lucide-react"
 import { contractsApi, type Contract } from "@/lib/api/contracts"
 import { ipfsApi } from "@/lib/api/ipfs"
 import { ContractMarkdownRenderer } from "@/components/contract/contract-markdown-renderer"
-import { PdfPreviewFrame } from "@/components/contract/pdf-preview-frame"
+import { PdfDocumentViewer } from "@/components/contract/pdf-document-viewer"
 import { formatReference } from "@/lib/utils/contractNaming"
 
 interface ContractViewPageProps {
@@ -91,14 +91,11 @@ export function ContractViewPage({ id }: ContractViewPageProps) {
           </div>
 
           {contract.metadata?.isExternalPdf ? (
-            <div className="w-full h-[85vh] bg-gray-100">
-              <PdfPreviewFrame
-                url={ipfsApi.getProxyUrl(contract.ipfsHash)}
-                fallbackUrl={ipfsApi.getPublicUrl(contract.ipfsHash)}
-                title="Contrat PDF"
-                className="w-full h-full border-0"
-              />
-            </div>
+            <PdfDocumentViewer
+              url={ipfsApi.getProxyUrl(contract.ipfsHash)}
+              fallbackUrl={ipfsApi.getPublicUrl(contract.ipfsHash)}
+              className="min-h-[85vh]"
+            />
           ) : (
             <div className="bg-gray-100 p-6 min-h-[900px]">
               <div className="max-w-[800px] mx-auto bg-white shadow-xl rounded-sm border border-gray-200">
@@ -108,7 +105,7 @@ export function ContractViewPage({ id }: ContractViewPageProps) {
                 >
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 text-purple-400" />
-                    <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest">ContracTify</span>
+                    <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Cachetify</span>
                   </div>
                   <span className="text-[10px] text-gray-400">
                     Créé le {new Date(contract.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -124,8 +121,7 @@ export function ContractViewPage({ id }: ContractViewPageProps) {
                   style={{ paddingLeft: 64, paddingRight: 64, paddingTop: 16, paddingBottom: 32 }}
                 >
                   <p className="text-[9px] text-gray-400 text-center">
-                    Document généré et certifié par ContracTify • Ancré sur Polygon Blockchain
-                    {contract.ipfsHash && ` • IPFS: ${contract.ipfsHash.slice(0, 16)}...`}
+                    Document généré et certifié par Cachetify • Ancré sur Polygon Blockchain
                   </p>
                 </div>
               </div>

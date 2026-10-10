@@ -28,6 +28,24 @@ export function getEffectiveStatus(contract: { status?: string; metadata?: { exp
  */
 export type StatusBadgeVariant = "draft" | "pending" | "signed" | "completed" | "cancelled" | "disputed" | "terminated" | "resigned" | "expired";
 
+// Miroir, côté navigateur, de mapContractStatus() dans backend/services/blockchain-sync.js —
+// utilisé uniquement par la page publique de vérification pour interpréter le statut lu
+// directement sur la blockchain (ContractManager.sol n'a pas d'enum nommée, juste un uint8).
+const ON_CHAIN_STATUS_MAP: Record<number, string> = {
+  0: "DRAFT",
+  1: "PENDING_SIGNATURES",
+  2: "ACTIVE",
+  3: "COMPLETED",
+  4: "CANCELLED",
+  5: "DISPUTED",
+  6: "TERMINATED",
+  7: "RESIGNED",
+};
+
+export function mapOnChainStatus(value: number | bigint): string {
+  return ON_CHAIN_STATUS_MAP[Number(value)] || "DRAFT";
+}
+
 export function getStatusBadgeVariant(status: string): StatusBadgeVariant {
   switch (status.toUpperCase()) {
     case 'DRAFT_WAITING_SIGNERS': return 'draft';

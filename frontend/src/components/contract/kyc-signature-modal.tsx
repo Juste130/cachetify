@@ -20,9 +20,11 @@ import {
   AlertTriangle,
   Loader2,
   CheckCircle2,
+  Download,
 } from "lucide-react"
 import { signatureLegalBasisClause } from "@/lib/contract-templates"
-import { computeSHA256, computeRemoteFileSHA256 } from "@/lib/utils/hash"
+import { computeSHA256, computeRemoteFileSHA256, downloadTextForVerification } from "@/lib/utils/hash"
+import { buildContractFileBaseName } from "@/lib/utils/contractNaming"
 
 interface KycSignatureModalProps {
   open: boolean
@@ -46,6 +48,18 @@ interface KycSignatureModalProps {
   /** Free-text legal basis entered by the creator when `country` isn't one of the mapped
    *  ones — see `signatureLegalBasisClause`. */
   customLegalBasis?: string
+  /** These four, together, let the success screen offer the exact same "document à
+   *  conserver pour la vérification" download already on the contract details page —
+   *  building the same file name (buildContractFileBaseName) instead of a different one,
+   *  and, for an import, forcing a real download (?download=1) rather than the `ipfsUrl`
+   *  above, which only ever opens inline. Right after signing is the moment this file
+   *  matters most — most people close this modal and never come back to the details page. */
+  documentType?: string
+  reference?: number
+  createdAt?: string
+  partyNames?: (string | undefined)[]
+  /** Only meaningful for an imported PDF (isImportedPdf) — see ipfsApi.getDownloadUrl. */
+  downloadUrl?: string
 }
 
 const STEPS = [
@@ -94,6 +108,11 @@ export function KycSignatureModal({
   signerEmail,
   country,
   customLegalBasis,
+  documentType,
+  reference,
+  createdAt,
+  partyNames,
+  downloadUrl,
 }: KycSignatureModalProps) {
   const [currentStep, setCurrentStep] = useState(0)
   const [agreed, setAgreed] = useState(false)
@@ -232,6 +251,49 @@ export function KycSignatureModal({
                 Votre signature a été enregistrée sur la blockchain. Le contrat a été mis à
                 jour automatiquement.
               </p>
+
+              {/* Le moment le plus sûr de proposer ce téléchargement : la plupart des gens
+                  ferment ce dialogue et ne reviennent jamais sur la page de détail — voir
+                  "Document à conserver pour la vérification" sur contract-details-page.tsx,
+                  même mécanique, même nom de fichier (buildContractFileBaseName). */}
+              {reference !== undefined && createdAt && (!isImportedPdf || downloadUrl) && (
+                <div className="mb-6 text-left">
+                  <Button
+                    variant="outline"
+                    className="w-full text-xs gap-2"
+                    asChild={isImportedPdf}
+                    onClick={
+                      isImportedPdf
+                        ? undefined
+                        : () => {
+                            const fileBaseName = buildContractFileBaseName({
+                              documentType: documentType || "Contrat",
+                              partyNames: (partyNames || []).filter((n): n is string => !!n),
+                              createdAt: new Date(createdAt),
+                              reference,
+                            });
+                            downloadTextForVerification(contractContent || "", `${fileBaseName}-a-conserver.txt`);
+                          }
+                    }
+                  >
+                    {isImportedPdf ? (
+                      <a href={downloadUrl}>
+                        <Download className="w-3 h-3" />
+                        Télécharger le document original
+                      </a>
+                    ) : (
+                      <>
+                        <Download className="w-3 h-3" />
+                        Télécharger le fichier à conserver
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground mt-2">
+                    Gardez ce fichier de côté : vous pourrez le redéposer sur la page de vérification publique pour prouver que ce contrat n'a pas été modifié.
+                  </p>
+                </div>
+              )}
+
               <Button onClick={handleClose} className="w-full">
                 Fermer
               </Button>

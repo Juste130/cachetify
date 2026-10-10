@@ -76,14 +76,14 @@ export const ipfsApi = {
     },
 
     /**
-     * Get public IPFS URL — points directly at the (possibly third-party) gateway. Kept for
-     * the QR code / certificate / "open on IPFS" links, where an external destination is the
-     * whole point. NOT what previews in this app should fetch from — see getProxyUrl.
+     * Les documents sont chiffrés côté serveur (voir services/ai.js côté backend et
+     * utils/document-crypto.js) : il n'existe plus de passerelle publique où les consulter
+     * directement. Conservé sous ce nom pour ne pas devoir modifier tous ses appelants
+     * (page de détail, aperçu PDF...), mais délègue maintenant à getProxyUrl, la seule route
+     * qui sait déchiffrer le document pour un participant authentifié.
      */
     getPublicUrl(cid: string): string {
-        const gateway =
-            process.env.NEXT_PUBLIC_IPFS_GATEWAY || 'https://gateway.pinata.cloud';
-        return `${gateway}/ipfs/${cid}`;
+        return ipfsApi.getProxyUrl(cid);
     },
 
     /**
@@ -99,5 +99,16 @@ export const ipfsApi = {
     getProxyUrl(cid: string): string {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
         return `${apiUrl}/api/ipfs/proxy/${cid}`;
+    },
+
+    /**
+     * Même route que getProxyUrl, mais force un téléchargement (Content-Disposition:
+     * attachment) plutôt qu'un affichage dans l'application. C'est le fichier original,
+     * octet pour octet — celui dont l'empreinte est ancrée sur la blockchain — donc celui à
+     * garder pour une vérification ultérieure (voir "Document à conserver pour la
+     * vérification" sur la page de détail d'un contrat importé).
+     */
+    getDownloadUrl(cid: string): string {
+        return `${ipfsApi.getProxyUrl(cid)}?download=1`;
     },
 };

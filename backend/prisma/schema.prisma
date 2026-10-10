@@ -72,7 +72,7 @@ model User {
 
 // ==================== INVITATIONS ====================
 //
-// Lets any authenticated user invite someone who doesn't have a ContracTify account yet,
+// Lets any authenticated user invite someone who doesn't have a Cachetify account yet,
 // by email — from the dashboard (invite a future counterparty) or from the admin users
 // panel. There's no acceptance workflow to track: Privy handles signup itself, so
 // "accepted" is simply "a User with this email now exists" — this table only exists to
@@ -138,6 +138,10 @@ model ContractCache {
   // writes, unlike a date/time-based scheme.
   reference  Int            @unique @default(autoincrement())
   ipfsHash   String?        @map("ipfs_hash") // Optional until IPFS upload
+  // Jeton non devinable (128 bits, base64url) vers lequel pointe le code QR du certificat —
+  // remplace l'ancien usage de `reference`/`id` en clair sur la page publique de
+  // vérification, énumérables par nature. Nullable pour les lignes créées avant ce champ.
+  publicToken String?       @unique @map("public_token")
   status     ContractStatus
   metadata   Json
   lastSync   DateTime       @map("last_sync")
@@ -356,6 +360,11 @@ model Notification {
 
 // ==================== IPFS DOCUMENTS ====================
 
+// Le nom du modèle et le champ `cid` restent tels quels pour ne pas toucher au smart contract
+// déjà déployé (son paramètre s'appelle `ipfsHash`) ni aux nombreux appelants existants.
+// Depuis le passage au chiffrement local (mémoire, chapitre 2), `cid` n'est plus un vrai CID
+// IPFS mais une référence "local-<sha256 du texte clair>" (voir utils/document-crypto.js),
+// et `fileData` contient le document CHIFFRÉ, plus jamais envoyé à un service tiers.
 model IpfsDocument {
   id         String   @id @default(uuid())
   cid        String   @unique
@@ -364,16 +373,17 @@ model IpfsDocument {
   mimeType   String?  @map("mime_type")
   uploadedBy String?  @map("uploaded_by")
   createdAt  DateTime @default(now()) @map("created_at")
-  // Verified local cache of the pinned bytes — NOT a second source of truth. IPFS (the CID)
-  // and the on-chain sha256Hash remain the only canonical record; this column exists purely
-  // so the app can serve a document from its own database instead of depending on a
-  // third-party gateway's cooperation (CORS, framing headers, uptime) for every view. Set at
-  // upload time; serving code re-verifies this buffer's SHA-256 against the contract's
-  // recorded hash on every read (for an imported PDF, where that hash is meaningful) and
-  // re-fetches + overwrites it from the real IPFS content if it's ever missing or fails to
-  // match (see proxyDocument in ipfs.js), so a corrupted or tampered row self-heals from the
-  // canonical source instead of being served as if it were authoritative.
-  fileData   Bytes?   @map("file_data")
+  // Document chiffré (AES-256-GCM) — jamais le texte clair.
+  fileData         Bytes?  @map("file_data")
+  encryptionIv     Bytes?  @map("encryption_iv")
+  encryptionAuthTag Bytes? @map("encryption_auth_tag")
+  // Clé de document, elle-même chiffrée avec la clé maître (MASTER_ENCRYPTION_KEY) — voir
+  // utils/document-crypto.js. Une valeur NULL sur ces quatre colonnes de chiffrement signale
+  // une ligne créée avant ce changement (import Pinata historique) ; proxyDocument la traite
+  // comme non déchiffrable plutôt que d'échouer silencieusement.
+  wrappedKey    Bytes? @map("wrapped_key")
+  keyIv         Bytes? @map("key_iv")
+  keyAuthTag    Bytes? @map("key_auth_tag")
 
   @@map("ipfs_documents")
 }
