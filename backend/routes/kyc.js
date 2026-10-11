@@ -2,11 +2,6 @@ const express = require('express');
 const router = express.Router();
 const kycController = require('../controllers/kyc');
 const { authenticate } = require('../middleware/auth');
-const { requireFeature } = require('../middleware/feature-flag');
-
-// Vérification d'identité hors périmètre du mémoire de licence : masquée par défaut — voir
-// config.features.kyc.
-router.use(requireFeature('kyc'));
 
 /**
  * @route   GET /api/kyc/status

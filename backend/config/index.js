@@ -51,10 +51,10 @@ const config = {
     // Séquestre hors périmètre du mémoire de licence : masqué par défaut (routes ET
     // interface), code et tests conservés intacts. Repasser à 'true' pour le réactiver, par
     // exemple une fois un partenaire de paiement disponible — voir requireFeature() dans
-    // middleware/feature-flag.js pour la façon dont ce drapeau garde les routes.
+    // middleware/feature-flag.js pour la façon dont ce drapeau garde les routes. Le KYC, lui,
+    // reste volontairement actif sans drapeau (voir frontend/src/lib/features.ts).
     features: {
         escrow: process.env.FEATURE_ESCROW === 'true',
-        kyc: process.env.FEATURE_KYC === 'true',
     },
 
     // Identity verification (KYC) — Smile ID, chosen for confirmed coverage of all four
