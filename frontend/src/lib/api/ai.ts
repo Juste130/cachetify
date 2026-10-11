@@ -75,9 +75,14 @@ export const aiApi = {
     },
 
     /**
-     * Validate contract compliance
+     * Validate contract compliance. partyAData/partyBData sont optionnels : quand ils sont
+     * fournis (le formulaire de création les a déjà), le serveur masque les champs
+     * personnels (nom, courriel, adresse...) avant d'envoyer le texte au service d'IA.
      */
-    async validateContract(contractText: string): Promise<{
+    async validateContract(
+        contractText: string,
+        parties?: { partyAData?: Record<string, any>; partyBData?: Record<string, any> }
+    ): Promise<{
         isValid: boolean;
         issues: string[];
         suggestions: string[];
@@ -85,6 +90,8 @@ export const aiApi = {
         try {
             const response = await apiClient.post('/api/ai/validate', {
                 contractText,
+                partyAData: parties?.partyAData,
+                partyBData: parties?.partyBData,
             });
             return response.data;
         } catch (error) {
@@ -121,7 +128,22 @@ export const aiApi = {
      * silently. Gracefully returns neutral values for a scanned PDF with no text layer.
      */
     async analyzeImportedPdf(file: File): Promise<{
-        parties: { name: string; email: string }[];
+        parties: {
+            name: string;
+            email: string;
+            /** Best-effort classification from the document's own wording (mentions of
+             *  "société"/RCCM vs. "Monsieur/Madame") — null when not determinable. */
+            type: "company" | "individual" | null;
+            /** These four are only ever populated for a "company" party, and only when the
+             *  exact value was found verbatim in the extracted text (see analyzeImportedContract
+             *  server-side) — never guessed. */
+            rccm: string;
+            ifu: string;
+            legalRepName: string;
+            legalRepTitle: string;
+            /** ISO (yyyy-mm-dd), only for an "individual" party, only when found verbatim. */
+            dateOfBirth: string;
+        }[];
         looksLikeContract: boolean | null;
         looksLikeContractConfidence: "high" | "medium" | "low";
         mentionsExistingSignature: boolean;

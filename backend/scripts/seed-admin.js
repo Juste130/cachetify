@@ -4,7 +4,7 @@
  * Promouvoit un utilisateur existant (par email) en ADMIN via la CLI.
  *
  * Usage :
- *   node scripts/seed-admin.js admin@contractify.io
+ *   node scripts/seed-admin.js admin@cachetify.io
  *
  * Pré-requis : L'utilisateur doit déjà exister en base de données.
  * Si ce n'est pas le cas, ajoutez son email dans ADMIN_EMAILS dans le .env

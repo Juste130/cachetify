@@ -17,9 +17,41 @@ export async function computeSHA256(text: string): Promise<string> {
   return digestToHex(encoder.encode(text));
 }
 
+/**
+ * Déclenche le téléchargement d'un fichier texte contenant EXACTEMENT `text`, encodé en
+ * UTF-8 sans BOM — les mêmes octets que computeSHA256(text) aurait hachés. Utilisé pour
+ * donner à l'utilisateur un fichier qu'il peut garder et redéposer plus tard sur la page
+ * publique de vérification pour prouver que le contrat n'a pas été modifié (voir
+ * "Vérifier un fichier" dans public-verify-page.tsx). Ne jamais faire transiter `text` par
+ * un composant d'affichage (rendu markdown, mise en forme...) avant cet appel : la moindre
+ * transformation change les octets, donc l'empreinte, et le fichier ne correspondrait plus.
+ */
+export function downloadTextForVerification(text: string, fileName: string): void {
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function computeFileSHA256(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   return digestToHex(buffer);
+}
+
+/**
+ * Empreinte d'octets déjà en mémoire (le certificat PDF tout juste généré, avant même son
+ * téléchargement) — utilisé pour le dépôt automatique du certificat (voir
+ * buildCertificatePdfBytes dans pdfGenerator.ts et contract-details-page.tsx).
+ */
+export async function computeBytesSHA256(bytes: Uint8Array): Promise<string> {
+  // TS's DOM lib now pins BufferSource to Uint8Array<ArrayBuffer> specifically; a plain
+  // Uint8Array (as returned by pdf-lib, jsPDF, etc.) is typed Uint8Array<ArrayBufferLike>,
+  // which is always backed by a real ArrayBuffer in practice in this codebase (never a
+  // SharedArrayBuffer) — narrowing the assertion is safe here.
+  return digestToHex(bytes as Uint8Array<ArrayBuffer>);
 }
 
 /**

@@ -42,9 +42,9 @@ export const CLAUSE_LIBRARY: Record<ClauseOption["key"], ClauseOption> = {
   },
   allowDispute: {
     key: "allowDispute",
-    label: "Résolution de litiges on-chain",
-    helpText: "Permet d'ouvrir un litige transparent via la blockchain si nécessaire.",
-    promptText: "Mentionner explicitement la possibilité d'ouvrir un litige transparent et traçable via la blockchain en cas de désaccord d'exécution.",
+    label: "Clause de règlement des litiges",
+    helpText: "Précise comment un désaccord d'exécution entre les parties sera réglé.",
+    promptText: "Prévoir une clause de règlement des litiges décrivant comment un désaccord d'exécution entre les parties sera réglé.",
   },
 };
 

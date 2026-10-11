@@ -1,12 +1,11 @@
 /**
- * ContractManager.sol has no "Expired" status — past expiresAt, signContract/cancelContract/
- * terminateContract/openDispute simply start reverting, but the on-chain (and cached)
- * status stays exactly where it was, forever. A PENDING_SIGNATURES or DISPUTED contract
- * whose signature/resolution window has irreversibly closed would otherwise keep showing
- * as "en attente" indefinitely — this computes a display-only "expired" override, without
- * writing anything to the database or the chain.
+ * ContractManager.sol has no "Expired" status — past expiresAt, signContract simply starts
+ * reverting, but the on-chain (and cached) status stays exactly where it was, forever. A
+ * PENDING_SIGNATURES contract whose signature window has irreversibly closed would otherwise
+ * keep showing as "en attente" indefinitely — this computes a display-only "expired"
+ * override, without writing anything to the database or the chain.
  */
-const STUCK_STATUSES = ["PENDING_SIGNATURES", "DISPUTED"];
+const STUCK_STATUSES = ["PENDING_SIGNATURES"];
 
 export function isEffectivelyExpired(contract: { status?: string; metadata?: { expiresAt?: number } }): boolean {
   const expiresAt = contract.metadata?.expiresAt;
@@ -27,6 +26,18 @@ export function getEffectiveStatus(contract: { status?: string; metadata?: { exp
  * ways depending on which screen you're looking at.
  */
 export type StatusBadgeVariant = "draft" | "pending" | "signed" | "completed" | "cancelled" | "disputed" | "terminated" | "resigned" | "expired";
+
+// Miroir, côté navigateur, de mapContractStatus() dans backend/services/blockchain-sync.js —
+// utilisé uniquement par la page publique de vérification pour interpréter le statut lu
+// directement sur la blockchain (ContractManager.sol n'a pas d'enum nommée, juste un uint8).
+const ON_CHAIN_STATUS_MAP: Record<number, string> = {
+  0: "PENDING_SIGNATURES",
+  1: "ACTIVE",
+};
+
+export function mapOnChainStatus(value: number | bigint): string {
+  return ON_CHAIN_STATUS_MAP[Number(value)] || "DRAFT";
+}
 
 export function getStatusBadgeVariant(status: string): StatusBadgeVariant {
   switch (status.toUpperCase()) {

@@ -10,7 +10,6 @@ export interface DeployableDraft {
   ipfsHash: string;
   metadata: {
     sha256Hash: string;
-    options?: { allowTermination?: boolean; allowDispute?: boolean };
     escrow?: { deadline?: string | null };
   };
   signatories?: { walletAddress?: string | null; role: number }[];
@@ -28,12 +27,7 @@ type CreateContractFn = (
   ipfsHash: string,
   sha256Hash: string,
   signersWithRoles: SignerWithRole[],
-  expiresAt: number,
-  allowTermination: boolean,
-  allowDispute: boolean,
-  escrowAmount: string,
-  penaltyPercent: number,
-  note: string
+  expiresAt: number
 ) => Promise<{ transactionHash?: string }>;
 
 type MarkDraftDeployedFn = (
@@ -67,32 +61,21 @@ export async function deployDraftContract(
       signedAt: 0,
     }));
 
-  // Escrow is handled entirely off-chain — it is deliberately never passed to the smart
-  // contract, so these stay at zero here.
-  //
   // expiresAt tracks the escrow deadline (a real date the creator entered) plus a buffer
   // for signature/administrative delay, instead of an arbitrary fixed duration with no
-  // relation to what was actually agreed.
+  // relation to what was actually agreed. Escrow itself is handled entirely off-chain.
   const escrowDeadline = metadata.escrow?.deadline ? new Date(metadata.escrow.deadline).getTime() / 1000 : null;
-  const EXPIRY_BUFFER_SECONDS = 90 * 24 * 60 * 60; // post-deadline window for dispute/administrative resolution
+  const EXPIRY_BUFFER_SECONDS = 90 * 24 * 60 * 60; // post-deadline window for administrative resolution
   const FALLBACK_DURATION_SECONDS = 2 * 365 * 24 * 60 * 60; // no escrow deadline declared — long enough not to lapse mid-contract
   const expiresAt = escrowDeadline
     ? Math.floor(escrowDeadline + EXPIRY_BUFFER_SECONDS)
     : Math.floor(Date.now() / 1000) + FALLBACK_DURATION_SECONDS;
 
-  // `??` (not `||`): an explicit `false` — the box the creator actually unchecked at
-  // creation — must stay false. `|| true` would silently force every deployed contract to
-  // allow termination/dispute on-chain regardless of what was chosen.
   const tx = await createContract(
     draft.ipfsHash,
     metadata.sha256Hash,
     signersWithRoles,
-    expiresAt,
-    metadata.options?.allowTermination ?? true,
-    metadata.options?.allowDispute ?? true,
-    "0",
-    0,
-    "Contrat déployé depuis un brouillon ContracTify"
+    expiresAt
   );
 
   // The backend independently verifies this transaction on-chain (receipt, event, creator

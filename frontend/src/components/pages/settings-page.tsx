@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { AppSidebar } from "../layout/app-sidebar";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -33,7 +32,6 @@ function getChainName(id: number | null) {
   switch (id) {
     case 1: return "Ethereum";
     case 137: return "Polygon";
-    case 80001: return "Mumbai Testnet";
     case 80002: return "Polygon Amoy Testnet";
     default: return "Réseau inconnu";
   }
@@ -77,10 +75,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-muted">
-      <AppSidebar />
-
-      <main className="flex-1 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)', padding: '2rem' }}>
+    <main className="flex-1 p-4 sm:p-6 md:p-8 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
         <h1 className="mb-8">Paramètres du compte</h1>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -216,7 +211,7 @@ export function SettingsPage() {
                       <div>
                         <p className="text-sm font-medium">Sécurité</p>
                         <p className="text-xs text-muted-foreground">
-                          Votre clé privée n'est jamais stockée sur nos serveurs. Les frais de transaction sont pris en charge par ContracTify — vous n'avez jamais besoin d'acheter de cryptomonnaie.
+                          Votre clé privée n'est jamais stockée sur nos serveurs. Les frais de transaction sont pris en charge par Cachetify — vous n'avez jamais besoin d'acheter de cryptomonnaie.
                         </p>
                       </div>
                     </div>
@@ -323,7 +318,7 @@ export function SettingsPage() {
                     <div className="flex-1">
                       <h4 className="mb-1">Déconnexion</h4>
                       <p className="text-sm text-muted-foreground">
-                        Met fin à votre session ContracTify et déconnecte votre wallet Privy sur cet appareil.
+                        Met fin à votre session Cachetify et déconnecte votre wallet Privy sur cet appareil.
                       </p>
                     </div>
                     <Button
@@ -380,8 +375,7 @@ export function SettingsPage() {
             )}
           </div>
         </div>
-      </main>
-    </div>
+    </main>
   );
 }
 

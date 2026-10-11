@@ -1,21 +1,20 @@
-# ContracTify 🔐
+# Cachetify 🔐
 
 A **secure, blockchain-based contract management platform** combining smart contracts with AI-powered contract generation. Fully transparent, decentralized, and built with modern web3 technologies.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933)](https://nodejs.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-14%2B-000000)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-15%2B-000000)](https://nextjs.org/)
 [![Polygon](https://img.shields.io/badge/Polygon-8247E5)](https://polygon.technology/)
 
 ## 🎯 Features
 
 ### Core Features
-- **🔗 Blockchain-Based Contracts** - Smart contracts on Polygon with cryptographic signatures
-- **🤖 AI Contract Generation** - Automatically generate contracts using Groq (Llama 3.3 70B)
+- **🔗 Blockchain-Based Contracts** - Smart contract on Polygon anchoring the document hash, storage reference, signer addresses, and each signature's date
+- **🤖 AI Contract Generation** - Automatically generate contracts using Groq (GPT-OSS-120B)
 - **📝 Contract Management** - Create, sign, and track contracts with full audit trail
-- **💎 NFT Proof** - Automatic NFT generation as proof of contract finalization
 - **👥 Multi-Signer Support** - Multiple parties can sign contracts sequentially
-- **📄 IPFS Storage** - Decentralized contract storage via Pinata/IPFS
+- **📄 Encrypted Document Storage** - Contracts are encrypted at rest (AES-256-GCM, one key per document) rather than stored on IPFS/Pinata
 - **🔐 Wallet Management** - Built-in Privy integration with Smart Wallets (ERC-4337) and native gas sponsorship
 
 ### Developer Experience
@@ -31,15 +30,15 @@ A **secure, blockchain-based contract management platform** combining smart cont
 - **PostgreSQL** 14+
 - **Redis** (optional, for caching)
 - **Alchemy API Key** (for RPC endpoints)
-- **Polygon Mumbai Testnet** account
+- **Polygon Amoy Testnet** account
 
 ## 🚀 Quick Start
 
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/yourusername/contractify.git
-cd contractify
+git clone https://github.com/yourusername/cachetify.git
+cd cachetify
 ```
 
 ### 2. Install Dependencies
@@ -67,7 +66,7 @@ cp frontend/.env.example frontend/.env.local
 ```env
 NODE_ENV=development
 PORT=5000
-DATABASE_URL=postgresql://user:password@localhost:5433/contractify
+DATABASE_URL=postgresql://user:password@localhost:5433/cachetify
 MASTER_ENCRYPTION_KEY=your_encryption_key
 JWT_SECRET=your_jwt_secret
 JWT_REFRESH_SECRET=your_jwt_refresh_secret
@@ -76,7 +75,6 @@ CONTRACT_MANAGER_ADDRESS=0xyour_deployed_contract_manager_address
 ADMIN_WALLET_ADDRESS=0xyour_admin_wallet_address
 FUNDER_PRIVATE_KEY=0xyour_testnet_key # (Optional/Legacy for fallback EOA funding)
 GROQ_API_KEY=your_groq_api_key
-PINATA_JWT=your_pinata_jwt
 PRIVY_APP_ID=your_privy_app_id
 PRIVY_APP_SECRET=your_privy_app_secret
 ```
@@ -121,7 +119,7 @@ Open [http://localhost:3000](http://localhost:3000)
 ## 🏗️ Project Structure
 
 ```
-contractify/
+cachetify/
 ├── backend/
 │   ├── config/              # Configuration
 │   ├── controllers/         # Request handlers
@@ -189,13 +187,13 @@ Authentication is entirely handled by Privy — there is no email/password or Go
 - `GET /api/contracts/search` - Search contracts
 - `GET /api/contracts/:contractId` - Get contract details
 
-Signing a contract and depositing/releasing escrow happen as direct on-chain transactions from the frontend (via the connected Privy wallet), not through the backend API.
+Creating and signing a contract happen as direct on-chain transactions from the frontend (via the connected Privy wallet), not through the backend API. Escrow (hors périmètre du mémoire, off by default) is simulated entirely off-chain through the backend API instead.
 
 See `backend/routes/` for the full list, including `ai.js`, `ipfs.js`, and `user.js`.
 
 ## 🛡️ Security
 
-- **End-to-End Encryption** - Private keys encrypted with AES-256-GCM
+- **Document Encryption at Rest** - Contracts encrypted with AES-256-GCM, one key per document, wrapped by a master key never stored in the database; private key custody is handled entirely by Privy, not by this app
 - **JWT Authentication** - Secure token-based auth
 - **Rate Limiting** - DDoS protection via request throttling
 - **CORS** - Restricted cross-origin access
@@ -226,7 +224,7 @@ See the [Privy Dashboard](https://dashboard.privy.io/) for configuring your Gas 
 cd blockchain
 npx hardhat test
 
-# Backend - no test suite written yet (npm test passes vacuously, --passWithNoTests)
+# Backend (Jest: AI guardrails, document encryption, certificate/verification endpoints, escrow, incidents)
 cd backend
 npm test
 ```
@@ -244,9 +242,9 @@ This project is licensed under the **MIT License** - see [LICENSE](./LICENSE) fi
 ## 🆘 Support
 
 - 📖 [Documentation](./backend/docs/)
-- 🐛 [Report a Bug](https://github.com/Juste130/contractify/issues)
-- 💬 [Discussions](https://github.com/Juste130/contractify/discussions)
+- 🐛 [Report a Bug](https://github.com/Juste130/cachetify/issues)
+- 💬 [Discussions](https://github.com/Juste130/cachetify/discussions)
 
 ---
 
-**Made by the ContracTify Team**
+**Made by the Cachetify Team**

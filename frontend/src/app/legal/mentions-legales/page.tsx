@@ -9,7 +9,7 @@ const sections: LegalSection[] = [
       <p>
         <em>
           Raison sociale, forme juridique, adresse du siège, numéro d'immatriculation et
-          directeur de la publication — à compléter par l'équipe ContracTify avant publication
+          directeur de la publication — à compléter par l'équipe Cachetify avant publication
           définitive. Ces informations sont obligatoires dans la plupart des juridictions avant
           toute mise en ligne d'un service à destination du public.
         </em>
@@ -27,9 +27,9 @@ const sections: LegalSection[] = [
     title: "Nature du service",
     content: (
       <p>
-        ContracTify est une plateforme de rédaction assistée par IA, de signature électronique et
+        Cachetify est une plateforme de rédaction assistée par IA, de signature électronique et
         d'archivage de contrats, s'appuyant sur le réseau blockchain Polygon pour l'horodatage et
-        la preuve d'intégrité des documents. À la date de cette page, ContracTify fonctionne sur
+        la preuve d'intégrité des documents. À la date de cette page, Cachetify fonctionne sur
         le réseau de test public Polygon Amoy, et non sur le réseau principal (mainnet) : les
         contrats et signatures y sont fonctionnels mais l'infrastructure blockchain sous-jacente
         n'est pas encore celle d'un environnement de production définitif.
@@ -41,7 +41,7 @@ const sections: LegalSection[] = [
     title: "Contrats générés par intelligence artificielle",
     content: (
       <p>
-        Les contrats proposés par l'assistant de rédaction de ContracTify sont générés
+        Les contrats proposés par l'assistant de rédaction de Cachetify sont générés
         automatiquement à partir des informations fournies par l'utilisateur. Ils ne constituent
         pas un avis juridique et ne remplacent pas la relecture par un professionnel du droit
         compétent dans la juridiction concernée, en particulier pour tout contrat à enjeu

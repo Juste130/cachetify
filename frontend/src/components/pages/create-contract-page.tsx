@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { AppSidebar } from "../layout/app-sidebar";
+import { FEATURES } from "@/lib/features";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { AIInput } from "../ui/ai-input";
@@ -46,6 +46,7 @@ import { useRouter } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../ui/tabs";
 import { ContractMarkdownRenderer } from "../contract/contract-markdown-renderer";
+import { PdfDocumentViewer } from "../contract/pdf-document-viewer";
 import {
   CONTRACT_TEMPLATES,
   CLAUSE_LIBRARY,
@@ -96,7 +97,7 @@ function buildEscrowClause(details: { escrowAmount: string; escrowDeadline: stri
 
 const ROLE_LABELS = SIGNATORY_ROLE_LABELS;
 
-const DRAFT_STORAGE_KEY = "contractify:create-contract-draft";
+const DRAFT_STORAGE_KEY = "cachetify:create-contract-draft";
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -148,6 +149,7 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
   const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
   const errorRef = useRef<HTMLDivElement>(null);
   const complianceCardRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [aiValidationResult, setAiValidationResult] = useState<{ issues: string[]; suggestions: string[] } | null>(null);
   const [consentChecked, setConsentChecked] = useState(false);
   const [isCheckingJurisdiction, setIsCheckingJurisdiction] = useState(false);
@@ -189,7 +191,16 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isAnalyzingPdf, setIsAnalyzingPdf] = useState(false);
   const [importAnalysis, setImportAnalysis] = useState<{
-    parties: { name: string; email: string }[];
+    parties: {
+      name: string;
+      email: string;
+      type: "company" | "individual" | null;
+      rccm: string;
+      ifu: string;
+      legalRepName: string;
+      legalRepTitle: string;
+      dateOfBirth: string;
+    }[];
     looksLikeContract: boolean | null;
     mentionsExistingSignature: boolean;
     signatureExcerpt: string | null;
@@ -202,16 +213,16 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
   // "CDI"/"Freelance"/... label the AI-generation flow already gets from an explicit choice —
   // one shared concept, filled in differently depending on how the contract was created.
   const [importedTypeLabel, setImportedTypeLabel] = useState("");
-  // Lets the user actually see the file they're about to commit to, before the final step —
-  // built from the local File object already in memory, so it's available instantly and
-  // doesn't wait on (or depend on) the IPFS upload that only happens at final submit.
-  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
-  useEffect(() => {
-    if (!uploadedFile) { setPdfPreviewUrl(null); return; }
-    const url = URL.createObjectURL(uploadedFile);
-    setPdfPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [uploadedFile]);
+  // Same "don't get stuck on the first import" concern as autoFilledParty below, applied to
+  // this one field: cleared as soon as the user edits it by hand.
+  const [typeLabelAutoFilled, setTypeLabelAutoFilled] = useState(false);
+  // Tracks whether the current Partie A / Partie B fields hold values this component itself
+  // filled in from an import analysis (true) versus values the user typed by hand (false).
+  // Needed because "don't overwrite what the user entered" and "do refresh stale suggestions
+  // from a previous import" are in tension: without this, re-importing a different file could
+  // never update a party block that a first import had already filled in, since the fields
+  // would no longer read as "empty" — see updateFormData below for where this gets cleared.
+  const [autoFilledParty, setAutoFilledParty] = useState({ partyA: false, partyB: false });
 
   const [contractText, setContractText] = useState("");
   const [signatories, setSignatories] = useState<Signatory[]>([]);
@@ -267,6 +278,14 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
   // de la laisser hors champ (le message peut apparaître loin du bouton cliqué).
   // Cas particulier étape 3 : si le blocage vient de la conformité non vérifiée,
   // on cible directement la carte de vérification plutôt que le bandeau générique.
+  // Le contenu de chaque étape recommence en haut de sa propre carte — sans ceci, le
+  // scroll de la page précédente (ex. tout en bas de l'étape 1 après avoir choisi une
+  // carte loin dans la liste) reste inchangé et fait atterrir l'utilisateur au milieu du
+  // contenu de l'étape suivante au lieu de son début.
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }, [currentStep]);
+
   useEffect(() => {
     if (!error) return;
     if (currentStep === 3 && !hasValidated && complianceCardRef.current) {
@@ -473,7 +492,10 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
     setAiValidationResult(null);
     setAcknowledgeIssues(false);
     try {
-      const response = await aiApi.validateContract(contractText);
+      const response = await aiApi.validateContract(contractText, {
+        partyAData: formData.partyA,
+        partyBData: formData.partyB,
+      });
       setAiValidationResult({ issues: response.issues, suggestions: response.suggestions });
       setHasValidated(true);
     } catch {
@@ -508,6 +530,35 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
     }
   };
 
+  // Applies an import's best-effort suggestion for one party. Deliberately not routed through
+  // updateFormData, which would immediately clear the autoFilledParty flag this function needs
+  // to set — see autoFilledParty above for why the two paths must stay distinct.
+  function applyImportedPartySuggestion(section: "partyA" | "partyB", fields: Partial<typeof formData.partyA>) {
+    setFormData((prev) => ({ ...prev, [section]: { ...prev[section], ...fields } }));
+    setAutoFilledParty((prev) => ({ ...prev, [section]: true }));
+  }
+
+  // Only the fields that make sense for the detected entity type travel together — a stray
+  // "rccm" surviving on a party the AI itself classified as an individual (or vice versa)
+  // would silently contradict the "Entreprise"/"Particulier" toggle this same suggestion sets.
+  function buildSuggestedPartyFields(party: {
+    name: string; email: string; type: "company" | "individual" | null;
+    rccm: string; ifu: string; legalRepName: string; legalRepTitle: string; dateOfBirth: string;
+  }): Partial<typeof formData.partyA> {
+    const fields: Partial<typeof formData.partyA> = { name: party.name };
+    if (party.email) fields.email = party.email;
+    if (party.type) fields.type = party.type;
+    if (party.type === "company") {
+      if (party.rccm) fields.rccm = party.rccm;
+      if (party.ifu) fields.ifu = party.ifu;
+      if (party.legalRepName) fields.legalRepName = party.legalRepName;
+      if (party.legalRepTitle) fields.legalRepTitle = party.legalRepTitle;
+    } else if (party.type === "individual" && party.dateOfBirth) {
+      fields.dateOfBirth = party.dateOfBirth;
+    }
+    return fields;
+  }
+
   // Fires right when a PDF is selected, well before final submission — the goal is to have
   // suggestions ready by the time the user reaches the Partie A/B fields on this same step.
   // Best-effort only: a scanned PDF with no text layer, or any failure, just leaves
@@ -522,24 +573,32 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
       const result = await aiApi.analyzeImportedPdf(file);
       setImportAnalysis(result);
       // Same rule as the template gallery: a known type's own display name ("CDI"), never
-      // its raw id — falls back to the AI's free-text guess, and only pre-fills if the user
-      // hasn't already typed something themselves.
-      if (!importedTypeLabel.trim()) {
+      // its raw id — falls back to the AI's free-text guess. Pre-fills when the field is
+      // still empty, OR still holds a previous import's own suggestion (typeLabelAutoFilled)
+      // — never when the user has typed something themselves in the meantime.
+      if (!importedTypeLabel.trim() || typeLabelAutoFilled) {
         const known = result.documentType?.knownType
           ? getContractTemplate(result.documentType.knownType)?.name
           : null;
-        setImportedTypeLabel(known || result.documentType?.suggestedLabel || "");
+        const label = known || result.documentType?.suggestedLabel || "";
+        if (label) {
+          setImportedTypeLabel(label);
+          setTypeLabelAutoFilled(true);
+        }
       }
-      // Pré-remplit Partie A / Partie B seulement si l'utilisateur n'a rien saisi
-      // lui-même — une suggestion ne doit jamais écraser une valeur déjà entrée.
+      // Pré-remplit Partie A / Partie B si l'utilisateur n'a rien saisi lui-même, ou si les
+      // champs actuels viennent déjà d'un import précédent (autoFilledParty) — dans ce dernier
+      // cas on rafraîchit avec la nouvelle détection plutôt que de rester bloqué sur la
+      // première suggestion. Une valeur réellement tapée par l'utilisateur n'est, elle,
+      // jamais écrasée (voir updateFormData, qui efface le flag dès qu'il tape).
       const [suggestedA, suggestedB] = result.parties;
-      if (suggestedA && !formData.partyA.name && !formData.partyA.email) {
-        updateFormData("partyA", "name", suggestedA.name);
-        if (suggestedA.email) updateFormData("partyA", "email", suggestedA.email);
+      const partyAIsEmpty = !formData.partyA.name && !formData.partyA.email;
+      if (suggestedA && (partyAIsEmpty || autoFilledParty.partyA)) {
+        applyImportedPartySuggestion("partyA", buildSuggestedPartyFields(suggestedA));
       }
-      if (suggestedB && !formData.partyB.name && !formData.partyB.email) {
-        updateFormData("partyB", "name", suggestedB.name);
-        if (suggestedB.email) updateFormData("partyB", "email", suggestedB.email);
+      const partyBIsEmpty = !formData.partyB.name && !formData.partyB.email;
+      if (suggestedB && (partyBIsEmpty || autoFilledParty.partyB)) {
+        applyImportedPartySuggestion("partyB", buildSuggestedPartyFields(suggestedB));
       }
     } catch {
       // Silencieux — l'import reste possible sans ces suggestions, en saisie manuelle.
@@ -741,6 +800,12 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
           ? { ...prev.options, [field]: value }
           : { ...(prev[section] as any), [field]: value },
     }));
+    // The user just took ownership of this field by hand — an import's suggestion for this
+    // party is no longer safe to silently overwrite on a later re-import (see
+    // applyImportedPartySuggestion / autoFilledParty above).
+    if (section === "partyA" || section === "partyB") {
+      setAutoFilledParty((prev) => (prev[section] ? { ...prev, [section]: false } : prev));
+    }
     // Clear validation error on change
     const key = `${section}.${field}`;
     if (validationErrors[key]) {
@@ -751,10 +816,8 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex min-h-screen bg-muted">
-      <AppSidebar />
-
-      <main className="flex-1 transition-all duration-300" style={{ marginLeft: "var(--sidebar-width, 256px)", padding: "2rem" }}>
+    <>
+      <main className="flex-1 p-4 sm:p-6 md:p-8 transition-all duration-300" style={{ marginLeft: "var(--sidebar-width, 256px)" }}>
         {/* Header */}
         <div className="mb-8">
           <h1 className="mb-2">Créer un nouveau contrat</h1>
@@ -831,7 +894,7 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
                   className={`p-6 cursor-pointer transition-all hover:shadow-lg border-2 ${
                     selectedTemplate === "pdf_upload" ? "border-[#FFC107] bg-[#FFC107]/5" : "border-border hover:border-[#FFC107]/50"
                   }`}
-                  onClick={() => setSelectedTemplate("pdf_upload")}
+                  onClick={() => { setSelectedTemplate("pdf_upload"); setCurrentStep(2); }}
                 >
                   <div className="flex items-center gap-4">
                     <div className={`p-4 rounded-xl shrink-0 ${selectedTemplate === "pdf_upload" ? "bg-[#FFC107]" : "bg-muted"}`}>
@@ -869,7 +932,7 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
                         className={`p-5 cursor-pointer transition-all hover:shadow-lg border-2 ${
                           selectedTemplate === template.id ? "border-[#9C27B0] bg-[#9C27B0]/5" : "border-transparent hover:border-[#9C27B0]/30 bg-muted/30"
                         }`}
-                        onClick={() => setSelectedTemplate(template.id)}
+                        onClick={() => { setSelectedTemplate(template.id); setCurrentStep(2); }}
                       >
                         <div className="flex items-start justify-between mb-3">
                           <div className={`p-2 rounded-lg ${selectedTemplate === template.id ? "bg-[#9C27B0]/20" : "bg-background"}`}>
@@ -888,17 +951,6 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
                   })}
                 </div>
               </div>
-
-              <div className="flex justify-end pt-4 border-t">
-                <Button
-                  className={`${selectedTemplate === "pdf_upload" ? "bg-[#FFC107] text-[#212121] hover:bg-[#FFB300]" : "bg-[#9C27B0] text-white hover:bg-[#7B1FA2]"} px-8 py-6 text-lg font-bold`}
-                  onClick={() => setCurrentStep(2)}
-                  disabled={!selectedTemplate}
-                >
-                  Suivant
-                  <ChevronRight className="w-5 h-5 ml-2" />
-                </Button>
-              </div>
             </Card>
           )}
 
@@ -908,11 +960,20 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
               {selectedTemplate === "pdf_upload" && (
                 <div className="space-y-6 text-center mb-10">
                    <h2 className="text-2xl font-black tracking-tight">Importez votre contrat</h2>
-                   <div className="border-2 border-dashed border-[#9C27B0]/30 rounded-xl p-10 bg-muted/20 hover:bg-muted/40 transition-colors">
+                   <div
+                     className="border-2 border-dashed border-[#9C27B0]/30 rounded-xl p-10 bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer"
+                     onClick={() => fileInputRef.current?.click()}
+                   >
                      <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                     <p className="text-sm font-medium mb-2">Glissez-déposez votre contrat PDF ici</p>
+                     <p className="text-sm font-medium mb-2">Cliquez ici pour sélectionner votre contrat PDF</p>
                      <p className="text-xs text-muted-foreground mb-4">Formats acceptés : .pdf (Max 10Mo)</p>
-                     <Input type="file" accept=".pdf" className="max-w-xs mx-auto" onChange={(e) => handlePdfSelected(e.target.files?.[0] || null)} />
+                     <Input
+                       ref={fileInputRef}
+                       type="file"
+                       accept=".pdf"
+                       className="hidden"
+                       onChange={(e) => handlePdfSelected(e.target.files?.[0] || null)}
+                     />
                    </div>
                    {uploadedFile && (
                      <div className="mt-4 p-4 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center justify-center gap-2 text-green-700 dark:text-green-400">
@@ -922,16 +983,16 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
                    )}
                    {/* Lets the user confirm "is this really the right file" before the final,
                        irreversible step — the document itself was otherwise never shown until
-                       after the contract had already been anchored. */}
-                   {pdfPreviewUrl && (
+                       after the contract had already been anchored. Rendered the same way as an
+                       AI-generated contract's own preview (paper sheets via pdf.js), not handed
+                       to the browser's native PDF plugin — that plugin ships its own
+                       download/print toolbar outside this app's control, which would let anyone
+                       pull the raw file straight out of this "preview" step. */}
+                   {uploadedFile && (
                      <div className="text-left">
                        <p className="text-xs font-semibold text-muted-foreground mb-2">Aperçu du fichier :</p>
-                       <div className="border rounded-xl overflow-hidden bg-white h-[420px]">
-                         {/* `allow-same-origin` is required for a blob: URL to render at all —
-                             without it the frame is an opaque origin and Chrome blocks
-                             loading its own blob into it as a cross-origin navigation. Safe
-                             here specifically because `allow-scripts` is never also set. */}
-                         <iframe src={pdfPreviewUrl} className="w-full h-full border-0" title="Aperçu du contrat PDF importé" sandbox="allow-same-origin" />
+                       <div className="rounded-xl overflow-hidden border border-gray-200">
+                         <PdfDocumentViewer file={uploadedFile} className="max-h-[600px]" />
                        </div>
                      </div>
                    )}
@@ -946,7 +1007,7 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
                          <Input
                            placeholder={isAnalyzingPdf ? "Détection en cours..." : "Ex. Bail commercial, CDI, Reconnaissance de dette..."}
                            value={importedTypeLabel}
-                           onChange={(e) => setImportedTypeLabel(e.target.value)}
+                           onChange={(e) => { setImportedTypeLabel(e.target.value); setTypeLabelAutoFilled(false); }}
                          />
                        </FieldGroup>
                        <p className="text-[11px] text-muted-foreground mt-1">
@@ -974,8 +1035,8 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
                          <div className="text-left p-4 bg-destructive/5 border-2 border-destructive/30 rounded-xl flex items-start gap-3">
                            <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
                            <div className="space-y-2">
-                             <p className="text-xs text-foreground"><strong>Signature électronique détectée dans le fichier</strong> — ce document semble déjà signé numériquement (hors ContracTify). Cette détection est fiable : elle lit directement la structure du PDF, pas seulement son texte.</p>
-                             <p className="text-xs text-muted-foreground">Si ce contrat est déjà conclu, ContracTify peut simplement l'ancrer comme preuve — faire re-signer les parties ici créerait une nouvelle date de signature, distincte de celle déjà indiquée sur le document.</p>
+                             <p className="text-xs text-foreground"><strong>Signature électronique détectée dans le fichier</strong> — ce document semble déjà signé numériquement (hors Cachetify). Cette détection est fiable : elle lit directement la structure du PDF, pas seulement son texte.</p>
+                             <p className="text-xs text-muted-foreground">Si ce contrat est déjà conclu, Cachetify peut simplement l'ancrer comme preuve — faire re-signer les parties ici créerait une nouvelle date de signature, distincte de celle déjà indiquée sur le document.</p>
                            </div>
                          </div>
                        )}
@@ -1359,37 +1420,43 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
                   </div>
                 </Card>
 
-                {/* Séquestre (escrow) — argent réel, pas de blockchain */}
-                <Card className="p-6 bg-muted/30 border-0 shadow-none mb-6">
-                  <div className="space-y-4">
-                    <h3 className="font-bold text-lg flex items-center gap-3 flex-wrap">
-                      <Shield className="w-6 h-6 text-[#FFC107]" />
-                      Séquestre — optionnel
-                      <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-muted-foreground/10 text-muted-foreground">Dépôt réel à venir</span>
-                    </h3>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      <strong className="text-foreground">Le paiement en ligne n'est pas encore activé sur la plateforme.</strong> Vous pouvez déclarer ces conditions dès maintenant — elles seront enregistrées avec le contrat — mais aucun argent ne sera réellement prélevé tant que cette fonctionnalité n'est pas disponible. Une fois activé : ce montant en FCFA sera à déposer par vous (le créateur) via paiement en ligne (carte ou mobile money, aucun wallet crypto requis), puis libéré automatiquement à l'échéance (les deux parties prévenues 72h, 48h et 24h avant), sauf si vous signalez un problème avant cette date. Laissez à 0 si ce contrat n'a pas besoin de séquestre.
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                      <FieldGroup label="Montant du séquestre (FCFA)" error={validationErrors["details.escrowAmount"]}>
-                        <Input type="number" min="0" step="1" placeholder="0" className="bg-background"
-                          value={formData.details.escrowAmount}
-                          onChange={(e) => updateFormData("details", "escrowAmount", e.target.value)} />
-                      </FieldGroup>
-                      <FieldGroup label="Échéance du séquestre" error={validationErrors["details.escrowDeadline"]}>
-                        <Input type="date" className="bg-background"
-                          value={formData.details.escrowDeadline}
-                          onChange={(e) => updateFormData("details", "escrowDeadline", e.target.value)} />
-                        <p className="text-[11px] text-muted-foreground mt-1">Date à laquelle la prestation doit être terminée — déclenche la fenêtre de validation avant libération.</p>
-                      </FieldGroup>
-                      <FieldGroup label="Pénalité de retard (%)">
-                        <Input type="number" min="0" max="100" placeholder="0" className="bg-background"
-                          value={formData.details.penaltyPercent}
-                          onChange={(e) => updateFormData("details", "penaltyPercent", e.target.value)} />
-                      </FieldGroup>
+                {/* Séquestre (escrow) — argent réel, pas de blockchain. Hors périmètre du
+                    mémoire (voir frontend/src/lib/features.ts) : masqué tant que
+                    FEATURES.escrow est faux, mais les champs/état sous-jacents restent en
+                    place (escrowDeclared reste alors naturellement faux, aucune clause n'est
+                    ajoutée au contrat — voir plus haut). */}
+                {FEATURES.escrow && (
+                  <Card className="p-6 bg-muted/30 border-0 shadow-none mb-6">
+                    <div className="space-y-4">
+                      <h3 className="font-bold text-lg flex items-center gap-3 flex-wrap">
+                        <Shield className="w-6 h-6 text-[#FFC107]" />
+                        Séquestre — optionnel
+                        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-muted-foreground/10 text-muted-foreground">Dépôt réel à venir</span>
+                      </h3>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        <strong className="text-foreground">Le paiement en ligne n'est pas encore activé sur la plateforme.</strong> Vous pouvez déclarer ces conditions dès maintenant — elles seront enregistrées avec le contrat — mais aucun argent ne sera réellement prélevé tant que cette fonctionnalité n'est pas disponible. Une fois activé : ce montant en FCFA sera à déposer par vous (le créateur) via paiement en ligne (carte ou mobile money, aucun wallet crypto requis), puis libéré automatiquement à l'échéance (les deux parties prévenues 72h, 48h et 24h avant), sauf si vous signalez un problème avant cette date. Laissez à 0 si ce contrat n'a pas besoin de séquestre.
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                        <FieldGroup label="Montant du séquestre (FCFA)" error={validationErrors["details.escrowAmount"]}>
+                          <Input type="number" min="0" step="1" placeholder="0" className="bg-background"
+                            value={formData.details.escrowAmount}
+                            onChange={(e) => updateFormData("details", "escrowAmount", e.target.value)} />
+                        </FieldGroup>
+                        <FieldGroup label="Échéance du séquestre" error={validationErrors["details.escrowDeadline"]}>
+                          <Input type="date" className="bg-background"
+                            value={formData.details.escrowDeadline}
+                            onChange={(e) => updateFormData("details", "escrowDeadline", e.target.value)} />
+                          <p className="text-[11px] text-muted-foreground mt-1">Date à laquelle la prestation doit être terminée — déclenche la fenêtre de validation avant libération.</p>
+                        </FieldGroup>
+                        <FieldGroup label="Pénalité de retard (%)">
+                          <Input type="number" min="0" max="100" placeholder="0" className="bg-background"
+                            value={formData.details.penaltyPercent}
+                            onChange={(e) => updateFormData("details", "penaltyPercent", e.target.value)} />
+                        </FieldGroup>
+                      </div>
                     </div>
-                  </div>
-                </Card>
+                  </Card>
+                )}
 
                 {/* Options */}
                 <Card className="p-6 bg-muted/30 border-0 shadow-none">
@@ -1909,7 +1976,7 @@ export function CreateContractPage({ template }: CreateContractPageProps = {}) {
           100% { transform: translateX(200%); }
         }
       `}</style>
-    </div>
+    </>
   );
 }
 

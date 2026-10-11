@@ -40,7 +40,7 @@ const config: HardhatUserConfig = {
       chainId: 80002
     }
   },
-  // ContractManager.ts deploys two contracts fresh in every single beforeEach — on a slower
+  // ContractManager.ts deploys a fresh contract in every single beforeEach — on a slower
   // machine that alone can approach Mocha's 40s default, timing the very first hook out before
   // any test body runs (unrelated to test/contract correctness). 120s gives that room back.
   mocha: {

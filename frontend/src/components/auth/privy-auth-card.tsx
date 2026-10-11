@@ -28,7 +28,7 @@ export function PrivyAuthCard({ title, subtitle, buttonLabel }: PrivyAuthCardPro
         return (
             <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-8 p-4">
                 <Link href="/" className="inline-block">
-                    <h1 className="text-[#FFC107] text-2xl font-bold">ContracTify</h1>
+                    <h1 className="text-[#FFC107] text-2xl font-bold">Cachetify</h1>
                 </Link>
                 <Spinner size="xl" label="Synchronisation de votre compte..." />
             </div>
@@ -40,7 +40,7 @@ export function PrivyAuthCard({ title, subtitle, buttonLabel }: PrivyAuthCardPro
             <Card className="w-full max-w-md p-8">
                 <div className="text-center mb-8">
                     <Link href="/" className="inline-block">
-                        <h1 className="text-[#FFC107] mb-2 text-2xl font-bold">ContracTify</h1>
+                        <h1 className="text-[#FFC107] mb-2 text-2xl font-bold">Cachetify</h1>
                     </Link>
                     <h2 className="mb-2">{title}</h2>
                     <p className="text-muted-foreground">{subtitle}</p>
@@ -69,7 +69,7 @@ export function PrivyAuthCard({ title, subtitle, buttonLabel }: PrivyAuthCardPro
                         <Link href="/legal/cgu" className="underline hover:text-[#FFC107]">Conditions générales</Link>
                         {" "}et la{" "}
                         <Link href="/legal/confidentialite" className="underline hover:text-[#FFC107]">Politique de confidentialité</Link>
-                        {" "}de ContracTify.
+                        {" "}de Cachetify.
                     </p>
                 </div>
             </Card>

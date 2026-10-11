@@ -114,7 +114,7 @@ exports.listOpenIncidents = async (req, res, next) => {
 exports.resolveIncident = async (req, res, next) => {
     try {
         if (req.user.role !== 'ADMIN') {
-            return res.status(403).json({ error: 'Seule l\'équipe ContracTify peut résoudre un incident.' });
+            return res.status(403).json({ error: 'Seule l\'équipe Cachetify peut résoudre un incident.' });
         }
         const { incidentId } = req.params;
         const { resolution } = req.body;

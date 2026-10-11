@@ -133,6 +133,24 @@ html {
     @apply border-border outline-ring/50;
   }
 
+  /* Tailwind v4's Preflight resets <button> to cursor:default instead of the browser's
+     native pointer — every interactive control needs it back explicitly. One rule here
+     instead of a cursor-pointer utility on every button/checkbox/switch/tab/menu item
+     individually across the app: Radix primitives (Button, Checkbox, Switch,
+     RadioGroupItem, TabsTrigger, AccordionTrigger, Toggle, SelectTrigger...) all render as
+     a real <button> under the hood, and the ones that don't (menu/select items, options,
+     tabs rendered as a div) expose their interactivity via these exact ARIA roles — so this
+     covers the whole component library in one place instead of 20+ separate files. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([data-disabled]),
+  [role="menuitemcheckbox"]:not([data-disabled]),
+  [role="menuitemradio"]:not([data-disabled]),
+  [role="option"]:not([data-disabled]),
+  [role="tab"]:not([data-disabled]) {
+    cursor: pointer;
+  }
+
   body {
     @apply bg-background text-foreground;
     -webkit-font-smoothing: antialiased;

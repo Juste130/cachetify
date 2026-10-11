@@ -61,6 +61,17 @@ const resendLimiter = rateLimit({
     keyGenerator: (req) => req.user?.userId || req.ip,
 });
 
+// Vérification publique — endpoint public, sans authentification, donc la cible naturelle
+// d'une énumération automatisée même avec un jeton non devinable (mémoire, chapitre 2,
+// section Sécurité et protection des données). Plus strict que le limiteur général.
+const verifyLimiter = rateLimit({
+    windowMs: config.rateLimit.windowMs,
+    max: config.rateLimit.verifyMaxRequests,
+    message: 'Trop de vérifications, réessayez plus tard',
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
 module.exports = {
     generalLimiter,
     aiLimiter,
@@ -68,4 +79,5 @@ module.exports = {
     authLimiter,
     inviteLimiter,
     resendLimiter,
+    verifyLimiter,
 };

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { signatoryRoleLabel } from "@/lib/contract-roles"
-import { AppSidebar } from "../layout/app-sidebar"
+import { FEATURES } from "@/lib/features"
 import { Button } from "../ui/button"
 import { Card } from "../ui/card"
 import { Badge } from "../ui/badge"
@@ -11,6 +11,8 @@ import { contractsApi, type Contract } from "@/lib/api/contracts"
 import { escrowApi, type Escrow } from "@/lib/api/escrow"
 import { incidentsApi, type Incident } from "@/lib/api/incidents"
 import { ipfsApi } from "@/lib/api/ipfs"
+import { downloadTextForVerification } from "@/lib/utils/hash"
+import { buildContractFileBaseName } from "@/lib/utils/contractNaming"
 import { useWeb3 } from "@/contexts/web3-context"
 import { useContract } from "@/hooks/useContract"
 import { useAuthStore } from "@/hooks/useAuth"
@@ -32,15 +34,14 @@ import {
   UserX,
   Gavel,
   PauseCircle,
-  XCircle,
   QrCode,
+  Lock,
 } from "lucide-react"
 import Link from "next/link"
 import { KycSignatureModal } from "@/components/contract/kyc-signature-modal"
 import { SignaturePanel } from "@/components/contract/signaturePanel"
-import { PdfPreviewFrame } from "@/components/contract/pdf-preview-frame"
+import { PdfDocumentViewer } from "@/components/contract/pdf-document-viewer"
 import { IdentityVerificationModal } from "@/components/kyc/identity-verification-modal"
-import { NFTViewer } from "@/components/nft/NFTViewer"
 import { AiBadge } from "../ui/ai-badge"
 import { ContractMarkdownRenderer } from "@/components/contract/contract-markdown-renderer"
 import { cn } from "@/components/ui/utils"
@@ -51,7 +52,6 @@ import {
   DISPUTE_REASONS,
   DISPUTE_REASON_LABELS,
   INCIDENT_STATUS_LABELS,
-  TERMINATION_REASON_LABELS,
   type IncidentReason,
 } from "@/lib/contract-incidents"
 
@@ -79,16 +79,13 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [showDisputeForm, setShowDisputeForm] = useState(false)
   const [showHoldForm, setShowHoldForm] = useState(false)
-  const [showTerminateForm, setShowTerminateForm] = useState(false)
   const [disputeReason, setDisputeReason] = useState<IncidentReason>("OTHER")
   const [disputeDescription, setDisputeDescription] = useState("")
   const [holdDescription, setHoldDescription] = useState("")
-  const [terminateReason, setTerminateReason] = useState(1)
-  const [terminateJustification, setTerminateJustification] = useState("")
   const [incidentActionLoading, setIncidentActionLoading] = useState(false)
   const [incidentActionError, setIncidentActionError] = useState<string | null>(null)
   const { account, isConnected } = useWeb3()
-  const { signContract, createContract, terminateContract, anchorJustification, loading: isSigning } = useContract()
+  const { signContract, createContract, loading: isSigning } = useContract()
   const { user } = useAuthStore()
 
   const copyToClipboard = async (field: string, value: string) => {
@@ -115,51 +112,84 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
     }
   }
 
+  // Partagé entre le téléchargement manuel (handleDownloadPDF) et le dépôt automatique du
+  // certificat officiel (voir l'effet plus bas) — un seul et même contenu dans les deux cas.
+  const buildCertificateDataFor = (c: Contract) => {
+    const signersForPdf = c.status === 'DRAFT_WAITING_SIGNERS' || c.status === 'READY_TO_DEPLOY'
+      ? (c as any).signatories.map((s: any) => ({ name: s.name || s.email, email: s.email, isRegistered: s.isRegistered }))
+      : (c.metadata?.signers || []).map((s: any) => ({ name: s.name || s.address, address: s.address, hasSigned: s.hasSigned }));
+
+    return {
+      title: c.title,
+      documentType: c.metadata?.type || "Contrat",
+      reference: c.reference,
+      content: c.metadata?.content || "",
+      // Toujours la vraie empreinte SHA-256 du fichier, jamais notre référence de stockage
+      // interne (c.ipfsHash) — c'est cette même valeur que la page publique de
+      // vérification compare au fichier qu'un tiers dépose. Voir pdfGenerator.ts.
+      sha256Hash: c.metadata?.sha256Hash || "Non généré",
+      // c.id est toujours une chaîne (brouillon ou déployé) : c.contractId est le seul champ
+      // qui porte réellement l'identifiant numérique on-chain une fois déployé. Utiliser c.id
+      // ici (comme avant) faisait toujours passer contractId à `undefined`, même sur un
+      // contrat actif — le certificat affichait alors "en attente de déploiement" à tort.
+      contractId: c.contractId ?? undefined,
+      draftId: c.contractId == null ? c.id : undefined,
+      publicToken: c.publicToken,
+      parties: {
+        partyA: c.metadata?.parties?.partyA || { name: "Partie A", email: "" },
+        partyB: c.metadata?.parties?.partyB || { name: "Partie B", email: "" }
+      },
+      signatories: signersForPdf,
+      status: c.status,
+      createdAt: c.createdAt,
+      isExternalPdf: !!c.metadata?.isExternalPdf,
+      proxyUrl: c.ipfsHash ? ipfsApi.getProxyUrl(c.ipfsHash) : undefined,
+      priorSignatureDetected: !!(c.metadata?.importAnalysis?.hasDigitalSignature || c.metadata?.importAnalysis?.mentionsExistingSignature),
+    };
+  }
+
   const handleDownloadPDF = async () => {
     if (!contract) return;
     setIsGeneratingPdf(true);
     try {
       const { generateCertifiedPDF } = await import("@/lib/utils/pdfGenerator");
-      
-      const signersForPdf = contract.status === 'DRAFT_WAITING_SIGNERS' || contract.status === 'READY_TO_DEPLOY'
-        ? (contract as any).signatories.map((s: any) => ({ name: s.name || s.email, email: s.email, isRegistered: s.isRegistered }))
-        : (contract.metadata?.signers || []).map((s: any) => ({ name: s.name || s.address, address: s.address, hasSigned: s.hasSigned }));
-
-      await generateCertifiedPDF({
-        title: contract.title,
-        documentType: contract.metadata?.type || "Contrat",
-        reference: contract.reference,
-        content: contract.metadata?.content || "",
-        // pdfGenerator's "sha256Hash" field is deliberately overloaded: for un contrat
-        // importé, il doit contenir le CID IPFS du PDF original (c'est ce que le certificat
-        // affiche sous "Identifiant IPFS (CID)"), pas l'empreinte SHA-256 réelle du fichier —
-        // celle-ci existe bien dans metadata.sha256Hash mais n'a rien d'un CID. L'ancien
-        // `metadata?.sha256Hash || contract.ipfsHash` prenait presque toujours la branche de
-        // gauche (le hash existe toujours pour un import), donc le certificat affichait un
-        // hex SHA-256 sous une étiquette "CID" — une valeur inutilisable pour retrouver le
-        // document sur IPFS.
-        sha256Hash: contract.metadata?.isExternalPdf
-          ? (contract.ipfsHash || "Non généré")
-          : (contract.metadata?.sha256Hash || "Non généré"),
-        contractId: typeof contract.id === 'number' ? contract.id : undefined,
-        draftId: typeof contract.id === 'string' ? contract.id : undefined,
-        parties: {
-          partyA: contract.metadata?.parties?.partyA || { name: "Partie A", email: "" },
-          partyB: contract.metadata?.parties?.partyB || { name: "Partie B", email: "" }
-        },
-        signatories: signersForPdf,
-        status: contract.status,
-        createdAt: contract.createdAt,
-        isExternalPdf: !!contract.metadata?.isExternalPdf,
-        ipfsUrl: contract.ipfsHash ? ipfsApi.getPublicUrl(contract.ipfsHash) : undefined,
-        priorSignatureDetected: !!(contract.metadata?.importAnalysis?.hasDigitalSignature || contract.metadata?.importAnalysis?.mentionsExistingSignature),
-      });
+      await generateCertifiedPDF(buildCertificateDataFor(contract));
     } catch (err) {
       console.error("Erreur génération PDF:", err);
     } finally {
       setIsGeneratingPdf(false);
     }
   }
+
+  // Dépôt AUTOMATIQUE du certificat officiel (le PDF avec code QR — voir la décision de le
+  // traiter comme le document définitif) : dès qu'un participant autorisé ouvre la page d'un
+  // contrat entièrement signé, son navigateur génère le certificat et le dépose (idempotent
+  // côté serveur : le premier arrivé gagne, voir storeCertificate) — aucun bouton à cliquer.
+  // Best-effort : une erreur ici ne doit jamais gêner la consultation du contrat, juste
+  // rester silencieuse en console.
+  useEffect(() => {
+    if (!contract) return;
+    if (!contract.contractId) return; // pas encore déployé sur la chaîne
+    if (contract.status !== 'ACTIVE' && contract.status !== 'COMPLETED') return; // pas encore entièrement signé
+    if (contract.metadata?.certificateCid) return; // déjà déposé
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const { buildCertificatePdfBytes } = await import("@/lib/utils/pdfGenerator");
+        const { bytes, fileName } = await buildCertificatePdfBytes(buildCertificateDataFor(contract));
+        if (cancelled) return;
+        // See the matching comment in hash.ts's computeBytesSHA256 — same TS/DOM typing papercut.
+        const file = new File([bytes as Uint8Array<ArrayBuffer>], fileName, { type: "application/pdf" });
+        await contractsApi.storeCertificate(String(contract.contractId), file, fileName);
+        if (!cancelled) fetchDetails({ silent: true });
+      } catch (err) {
+        console.error("Échec du dépôt automatique du certificat officiel :", err);
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contract?.contractId, contract?.status, contract?.metadata?.certificateCid])
 
   // `silent` skips the full-page loading state used for the initial load. Without it, ANY
   // refresh (e.g. right after signing) flips `loading` true, which unmounts the entire page
@@ -204,10 +234,20 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
     }
   }
 
+  // Dépend de `id` (la prop de route), pas de `contract` : ces deux appels n'ont besoin que
+  // de l'identifiant pour partir, pas du contrat déjà chargé — les faire attendre `contract`
+  // les mettait inutilement en série après fetchDetails() au lieu de partir en parallèle avec
+  // lui, ajoutant un aller-retour réseau complet à chaque ouverture de cette page (la
+  // destination la plus cliquée de l'app). Un contrat inaccessible ou sans séquestre reste
+  // silencieusement ignoré ci-dessus, comme avant.
+  //
+  // Séquestre hors périmètre du mémoire (FEATURES.escrow) : l'appel est sauté entièrement
+  // plutôt que laissé échouer silencieusement contre une route désactivée côté serveur — un
+  // aller-retour réseau de moins à chaque ouverture de cette page.
   useEffect(() => {
-    if (contract) fetchEscrow()
+    if (FEATURES.escrow) fetchEscrow()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contract?.id])
+  }, [id])
 
   const fetchIncidents = async () => {
     try {
@@ -218,10 +258,12 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
     }
   }
 
+  // Litiges/pauses : off-chain, mais existe uniquement pour bloquer la libération d'un
+  // séquestre (voir contract-incidents.ts) — masqué avec FEATURES.escrow pour la même raison.
   useEffect(() => {
-    if (contract) fetchIncidents()
+    if (FEATURES.escrow) fetchIncidents()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contract?.id])
+  }, [id])
 
   const handleSign = async () => {
     // The smart contract only understands the numeric on-chain contractId — never the
@@ -329,14 +371,9 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
     setIncidentActionLoading(true)
     setIncidentActionError(null)
     try {
-      // Best-effort on-chain breadcrumb — never blocks the actual dispute if it fails.
-      const onchainTxHash = contract?.contractId
-        ? await anchorJustification(String(contract.contractId), `DISPUTE ${disputeReason}: ${disputeDescription}`.slice(0, 200))
-        : null
       await incidentsApi.raiseDispute(id, {
         reason: disputeReason,
         description: disputeDescription,
-        onchainTxHash: onchainTxHash || undefined,
       })
       setShowDisputeForm(false)
       setDisputeDescription("")
@@ -353,10 +390,7 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
     setIncidentActionLoading(true)
     setIncidentActionError(null)
     try {
-      const onchainTxHash = contract?.contractId
-        ? await anchorJustification(String(contract.contractId), `HOLD proposed: ${holdDescription}`.slice(0, 200))
-        : null
-      await incidentsApi.proposeHold(id, { description: holdDescription, onchainTxHash: onchainTxHash || undefined })
+      await incidentsApi.proposeHold(id, { description: holdDescription })
       setShowHoldForm(false)
       setHoldDescription("")
       await fetchIncidents()
@@ -393,22 +427,6 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
     }
   }
 
-  const handleTerminate = async () => {
-    if (!contract?.contractId || !terminateJustification.trim()) return
-    setIncidentActionLoading(true)
-    setIncidentActionError(null)
-    try {
-      await terminateContract(String(contract.contractId), terminateReason, "", "", terminateJustification)
-      setShowTerminateForm(false)
-      setTerminateJustification("")
-      await fetchDetails({ silent: true })
-    } catch (err: any) {
-      setIncidentActionError(err.message || "La résiliation a échoué.")
-    } finally {
-      setIncidentActionLoading(false)
-    }
-  }
-
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'ACTIVE':
@@ -438,28 +456,22 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen bg-muted">
-        <AppSidebar />
-        <main className="flex-1 flex items-center justify-center" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </main>
-      </div>
+      <main className="flex-1 flex items-center justify-center" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </main>
     )
   }
 
   if (error || !contract) {
     return (
-      <div className="flex min-h-screen bg-muted">
-        <AppSidebar />
-        <main className="flex-1 p-8" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
-          <Card className="p-8 text-center max-w-2xl mx-auto">
-            <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
-            <h2 className="text-xl font-bold mb-2">Une erreur est survenue</h2>
-            <p className="text-muted-foreground mb-6">{error || "Contrat introuvable"}</p>
-            <Button onClick={() => window.location.reload()}>Réessayer</Button>
-          </Card>
-        </main>
-      </div>
+      <main className="flex-1 p-8" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
+        <Card className="p-8 text-center max-w-2xl mx-auto">
+          <AlertCircle className="w-12 h-12 text-destructive mx-auto mb-4" />
+          <h2 className="text-xl font-bold mb-2">Une erreur est survenue</h2>
+          <p className="text-muted-foreground mb-6">{error || "Contrat introuvable"}</p>
+          <Button onClick={() => window.location.reload()}>Réessayer</Button>
+        </Card>
+      </main>
     )
   }
 
@@ -548,17 +560,8 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
   const signedCount = signerRows.filter(s => s.hasSigned).length
   const roleLabel = signatoryRoleLabel
 
-  // contractId (this on-chain contract's own id) and nftTokenId (the separate, globally
-  // incrementing ERC-721 token counter in ContractNFT.sol) are two unrelated ID spaces —
-  // using one as a fallback for the other queries a random, likely wrong or non-existent
-  // NFT. "0" (a real string in the synced metadata) means "not minted yet", same as absent.
-  const rawNftTokenId = contract.metadata?.nftTokenId
-  const mintedNftTokenId = rawNftTokenId && rawNftTokenId !== "0" ? rawNftTokenId : null
-
   return (
-    <div className="flex min-h-screen bg-muted">
-      <AppSidebar />
-
+    <>
       <main className="flex-1 py-8 px-8 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
         {created && (
           <div className="max-w-6xl mx-auto mb-6 p-4 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center gap-3">
@@ -642,91 +645,10 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
                  Déployer sur la blockchain
                </Button>
               )}
-              {contract.status === 'ACTIVE' && contract.metadata?.allowTermination && (currentUserSigner || isCreator) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 text-destructive border-destructive/30 hover:bg-destructive/5"
-                  onClick={() => setShowTerminateForm((v) => !v)}
-                >
-                  <XCircle className="w-4 h-4" />
-                  Résilier
-                </Button>
-              )}
             </div>
           </div>
 
-          {showTerminateForm && (
-            <Card className="p-6 mb-8 border-destructive/30 bg-destructive/5">
-              <h3 className="font-bold flex items-center gap-2 mb-3 text-destructive">
-                <XCircle className="w-5 h-5" />
-                Résilier ce contrat
-              </h3>
-              <p className="text-xs text-muted-foreground mb-4">
-                Action définitive et irréversible, ancrée sur la blockchain. Toutes les parties seront notifiées.
-              </p>
-              <div className="space-y-3">
-                <select
-                  value={terminateReason}
-                  onChange={(e) => setTerminateReason(Number(e.target.value))}
-                  className="w-full p-2 rounded-lg border border-border bg-input-background text-sm"
-                >
-                  {TERMINATION_REASON_LABELS.slice(1).map((label, idx) => (
-                    <option key={idx + 1} value={idx + 1}>{label}</option>
-                  ))}
-                </select>
-                <textarea
-                  value={terminateJustification}
-                  onChange={(e) => setTerminateJustification(e.target.value)}
-                  placeholder="Justification de la résiliation (visible par toutes les parties)..."
-                  className="w-full p-2 rounded-lg border border-border bg-input-background text-sm min-h-[70px]"
-                  maxLength={200}
-                />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={handleTerminate}
-                    disabled={incidentActionLoading || !terminateJustification.trim()}
-                  >
-                    {incidentActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                    Confirmer la résiliation
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setShowTerminateForm(false)}>Annuler</Button>
-                </div>
-                {incidentActionError && (
-                  <p className="text-xs text-destructive flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5 shrink-0" />{incidentActionError}</p>
-                )}
-              </div>
-            </Card>
-          )}
-
-          {contract.metadata?.terminationInfo && (
-            <Card className="p-6 mb-8 border-red-500/30 bg-red-500/5">
-              <h3 className="font-bold flex items-center gap-2 mb-2 text-red-600">
-                <XCircle className="w-5 h-5" />
-                Ce contrat a été résilié
-              </h3>
-              <p className="text-sm">
-                <span className="font-medium">{TERMINATION_REASON_LABELS[contract.metadata.terminationInfo.reason] || "Raison non précisée"}</span>
-                {contract.metadata.terminationInfo.customReason && ` — ${contract.metadata.terminationInfo.customReason}`}
-              </p>
-              {contract.metadata.terminationInfo.justification && (
-                <p className="text-sm text-muted-foreground mt-1">{contract.metadata.terminationInfo.justification}</p>
-              )}
-              {contract.metadata.terminationInfo.proofIpfsHash && (
-                <a
-                  href={`https://gateway.pinata.cloud/ipfs/${contract.metadata.terminationInfo.proofIpfsHash}`}
-                  target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-primary underline mt-2 inline-block"
-                >
-                  Voir la preuve jointe
-                </a>
-              )}
-            </Card>
-          )}
-
-          {escrow && (
+          {FEATURES.escrow && escrow && (
             <Card className="p-6 mb-8 border-[#FFC107]/30 bg-[#FFC107]/5">
               <div className="flex items-start justify-between gap-4 flex-wrap mb-1">
                 <h3 className="font-bold flex items-center gap-2">
@@ -832,7 +754,7 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
             </Card>
           )}
 
-          {contract.status === 'ACTIVE' && (currentUserSigner || isCreator) && (
+          {FEATURES.escrow && contract.status === 'ACTIVE' && (currentUserSigner || isCreator) && (
             <Card className="p-6 mb-8">
               <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
                 <h3 className="font-bold flex items-center gap-2">
@@ -858,7 +780,7 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
               {showDisputeForm && (
                 <div className="p-4 rounded-lg border border-destructive/30 bg-destructive/5 mb-3 space-y-2">
                   <p className="text-xs text-muted-foreground">
-                    Prend effet immédiatement — bloque toute libération du séquestre jusqu'à résolution. L'équipe ContracTify tranche en cas de désaccord.
+                    Prend effet immédiatement — bloque toute libération du séquestre jusqu'à résolution. L'équipe Cachetify tranche en cas de désaccord.
                   </p>
                   <select
                     value={disputeReason}
@@ -958,7 +880,7 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
                       <div className="w-3 h-3 rounded-full bg-yellow-400" />
                       <div className="w-3 h-3 rounded-full bg-green-400" />
                     </div>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground ml-2">Document Officiel — ContracTify</span>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground ml-2">Document Officiel — Cachetify</span>
                   </div>
                   <div className="flex items-center gap-2">
                     {!contract.metadata?.isExternalPdf && <AiBadge />}
@@ -966,37 +888,47 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
                     {/* Previously this verification link existed only inside a downloaded PDF
                         certificate (see pdfGenerator.ts's QR code) — nothing on-screen pointed
                         anyone at the same public, no-account verification page, even though the
-                        page itself has existed since Point 3. */}
-                    <Link
-                      href={`/verify/${contract.contractId || contract.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
-                    >
-                      <QrCode className="w-3 h-3" />
-                      Vérifier ce contrat
-                    </Link>
+                        page itself has existed since Point 3.
+                        Le jeton public (publicToken), jamais contractId/id : la route de
+                        vérification ne connaît que ce jeton non devinable — voir
+                        getPublicVerification côté serveur et le mémoire, chapitre 2. Un contrat
+                        créé avant la migration l'ayant introduit n'en a pas encore : dans ce
+                        cas précis, pas de lien plutôt qu'un lien cassé. */}
+                    {contract.publicToken && (
+                      <Link
+                        href={`/verify/${contract.publicToken}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-[10px] font-medium text-primary hover:underline"
+                      >
+                        <QrCode className="w-3 h-3" />
+                        Vérifier ce contrat
+                      </Link>
+                    )}
                   </div>
                 </div>
 
                 {contract.metadata?.isExternalPdf ? (
                   <div>
-                    <div className="w-full h-[800px] bg-gray-100">
-                      <PdfPreviewFrame
-                        url={ipfsApi.getProxyUrl(contract.ipfsHash)}
-                        fallbackUrl={ipfsApi.getPublicUrl(contract.ipfsHash)}
-                        title="Contrat PDF"
-                        className="w-full h-full border-0"
-                      />
+                    <div className="flex items-center gap-2 py-2 px-6 bg-gray-50 border-b border-gray-100">
+                      <Lock className="w-3 h-3 text-gray-400 shrink-0" />
+                      <p className="text-[10px] text-gray-500">
+                        Aperçu en lecture seule — ce document importé ne peut pas être modifié depuis Cachetify.
+                      </p>
                     </div>
+                    <PdfDocumentViewer
+                      url={ipfsApi.getProxyUrl(contract.ipfsHash)}
+                      fallbackUrl={ipfsApi.getPublicUrl(contract.ipfsHash)}
+                      className="min-h-[900px]"
+                    />
                     {/* The AI-generated branch below has always carried this footer; an
                         imported PDF is rendered as a bare, unbranded file inside the iframe
                         with nothing around it confirming it's the same certified, blockchain-
-                        anchored document ContracTify tracks — this closes that gap. */}
+                        anchored document Cachetify tracks — this closes that gap. */}
                     <div className="border-t border-gray-100 bg-white py-4 px-6">
                       <p className="text-[9px] text-gray-400 text-center">
-                        Document original certifié par ContracTify • Ancré sur Polygon Blockchain
-                        {contract.ipfsHash && ` • IPFS: ${contract.ipfsHash.slice(0, 16)}...`}
+                        Document original certifié par Cachetify • Ancré sur Polygon Blockchain
+                        
                       </p>
                     </div>
                   </div>
@@ -1011,7 +943,7 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
                       >
                         <div className="flex items-center gap-2">
                           <Shield className="w-4 h-4 text-purple-400" />
-                          <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest">ContracTify</span>
+                          <span className="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Cachetify</span>
                         </div>
                         <span className="text-[10px] text-gray-400">
                           Créé le {new Date(contract.createdAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
@@ -1029,8 +961,8 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
                         style={{ paddingLeft: 64, paddingRight: 64, paddingTop: 16, paddingBottom: 32 }}
                       >
                         <p className="text-[9px] text-gray-400 text-center">
-                          Document généré et certifié par ContracTify • Ancré sur Polygon Blockchain
-                          {contract.ipfsHash && ` • IPFS: ${contract.ipfsHash.slice(0, 16)}...`}
+                          Document généré et certifié par Cachetify • Ancré sur Polygon Blockchain
+                          
                         </p>
                       </div>
                     </div>
@@ -1172,7 +1104,7 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
                     </div>
                   )}
                   <div style={{ minWidth: 0 }}>
-                    <span className="text-muted-foreground block mb-1.5">IPFS Hash</span>
+                    <span className="text-muted-foreground block mb-1.5">Référence de stockage</span>
                     {contract.ipfsHash ? (
                       <div className="flex items-center gap-1.5 bg-muted/50 rounded-md px-2.5 py-1.5 border border-border/60" style={{ minWidth: 0 }}>
                         <span
@@ -1186,7 +1118,7 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
                           type="button"
                           onClick={() => copyToClipboard('ipfsHash', contract.ipfsHash)}
                           className="shrink-0 p-1 rounded hover:bg-muted-foreground/10 transition-colors text-muted-foreground hover:text-foreground"
-                          aria-label="Copier le hash IPFS"
+                          aria-label="Copier la référence"
                         >
                           {copiedField === 'ipfsHash' ? (
                             <Check className="w-3.5 h-3.5 text-green-600" />
@@ -1204,29 +1136,54 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
                       Ce contrat est immuable et ancré sur le réseau Polygon. Chaque signature est une transaction vérifiable.
                     </p>
                     <div className="flex flex-col gap-2">
-                      {mintedNftTokenId ? (
-                        <NFTViewer
-                          tokenId={mintedNftTokenId}
-                          contractId={String(contract.contractId || contract.id)}
-                          title={contract.title}
-                          effectiveDate={contract.metadata?.effectiveDate ? new Date(contract.metadata.effectiveDate * 1000).toISOString() : undefined}
-                          ipfsUrl={contract.ipfsHash ? ipfsApi.getPublicUrl(contract.ipfsHash) : undefined}
-                          contractStatus={contract.status}
-                        />
-                      ) : (
-                        <p className="text-[11px] text-muted-foreground italic">
-                          {contract.status === 'ACTIVE' || contract.status === 'COMPLETED'
-                            ? "Certificat en cours de synchronisation..."
-                            : "Le certificat sera disponible une fois toutes les signatures collectées."}
-                        </p>
-                      )}
                       <Button variant="outline" className="w-full text-xs gap-2" asChild>
                         <a href={ipfsApi.getPublicUrl(contract.ipfsHash || '')} target="_blank" rel="noopener noreferrer">
                           <Download className="w-3 h-3" />
-                          Voir sur IPFS
+                          Voir le document
                         </a>
                       </Button>
                     </div>
+                  </div>
+
+                  {/* Sans ce fichier précis, personne ne peut se servir de "Vérifier un
+                      fichier" sur la page publique : ni le certificat (mise en forme
+                      différente), ni un export quelconque ne correspondent octet pour octet à
+                      ce qui a été réellement ancré sur la blockchain. */}
+                  <div className="pt-4 border-t">
+                    <p className="text-xs font-semibold mb-1">Document à conserver pour la vérification</p>
+                    <p className="text-[10px] text-muted-foreground mb-3">
+                      Gardez ce fichier de côté. Vous pourrez le redéposer plus tard sur la page de vérification publique pour prouver que le contrat n'a pas été modifié.
+                    </p>
+                    <Button
+                      variant="outline"
+                      className="w-full text-xs gap-2"
+                      asChild={!!contract.metadata?.isExternalPdf}
+                      onClick={
+                        contract.metadata?.isExternalPdf
+                          ? undefined
+                          : () => {
+                              const fileBaseName = buildContractFileBaseName({
+                                documentType: contract.metadata?.type || "Contrat",
+                                partyNames: [contract.metadata?.parties?.partyA?.name, contract.metadata?.parties?.partyB?.name].filter(Boolean),
+                                createdAt: new Date(contract.createdAt),
+                                reference: contract.reference,
+                              });
+                              downloadTextForVerification(contract.metadata?.content || "", `${fileBaseName}-a-conserver.txt`);
+                            }
+                      }
+                    >
+                      {contract.metadata?.isExternalPdf ? (
+                        <a href={ipfsApi.getDownloadUrl(contract.ipfsHash || '')}>
+                          <Download className="w-3 h-3" />
+                          Télécharger le document original
+                        </a>
+                      ) : (
+                        <>
+                          <Download className="w-3 h-3" />
+                          Télécharger le fichier à conserver
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
               </Card>
@@ -1245,7 +1202,7 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
                     <div className="w-1 self-stretch bg-green-500/20 rounded shrink-0"></div>
                     <div>
                       <p className="text-[11px] font-bold text-green-700">Certifié &amp; ancré</p>
-                      <p className="text-[10px] text-muted-foreground mt-1">Hash SHA-256 calculé et stocké sur IPFS + Polygon.</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">Hash SHA-256 calculé, document chiffré et empreinte ancrée sur Polygon.</p>
                     </div>
                   </div>
                 </div>
@@ -1270,6 +1227,11 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
           signerEmail={contract.metadata?.signers?.find((s: any) => s.address?.toLowerCase() === account?.toLowerCase())?.email}
           country={contract.metadata?.country}
           customLegalBasis={contract.metadata?.customLegalBasis}
+          documentType={contract.metadata?.type || "Contrat"}
+          reference={contract.reference}
+          createdAt={contract.createdAt}
+          partyNames={[contract.metadata?.parties?.partyA?.name, contract.metadata?.parties?.partyB?.name]}
+          downloadUrl={contract.ipfsHash ? ipfsApi.getDownloadUrl(contract.ipfsHash) : undefined}
         />
       )}
 
@@ -1293,7 +1255,7 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
         onClose={() => setShowIdentityVerification(false)}
         onVerified={() => setShowKycModal(true)}
       />
-    </div>
+    </>
   )
 }
 

@@ -2,6 +2,11 @@ const express = require('express');
 const router = express.Router();
 const escrowController = require('../controllers/escrow');
 const { authenticate } = require('../middleware/auth');
+const { requireFeature } = require('../middleware/feature-flag');
+
+// Séquestre hors périmètre du mémoire de licence (aucun partenaire de paiement) : masqué
+// par défaut, avant même l'authentification — voir config.features.escrow.
+router.use(requireFeature('escrow'));
 
 /**
  * @route   GET /api/contracts/:id/escrow

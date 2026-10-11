@@ -1,7 +1,7 @@
 {
-    "name": "contractify-backend",
+    "name": "cachetify-backend",
     "version": "1.0.0",
-    "description": "Backend API for Contractify - Hybrid blockchain contract management platform",
+    "description": "Backend API for Cachetify - Hybrid blockchain contract management platform",
     "main": "server.js",
     "scripts": {
         "dev": "cross-env NODE_OPTIONS=--dns-result-order=ipv4first nodemon server.js",

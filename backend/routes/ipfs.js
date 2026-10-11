@@ -30,23 +30,23 @@ const upload = multer({
 
 /**
  * @route   POST /api/ipfs/upload
- * @desc    Upload document to IPFS
+ * @desc    Dépose et chiffre un document (routes /api/ipfs/* conservées telles quelles pour
+ *          ne pas modifier le client frontend ; le stockage lui-même n'utilise plus IPFS,
+ *          voir services/ipfs.js)
  * @access  Private
  */
 router.post('/upload', authenticate, upload.single('file'), ipfsController.uploadDocument);
 
 /**
  * @route   POST /api/ipfs/upload-json
- * @desc    Upload JSON to IPFS
+ * @desc    Dépose et chiffre un objet JSON
  * @access  Private
  */
 router.post('/upload-json', authenticate, ipfsController.uploadJSON);
 
 /**
  * @route   GET /api/ipfs/proxy/:cid
- * @desc    Streams a pinned document (e.g. an imported PDF) back through this app's own
- *          origin instead of the browser talking to the IPFS gateway directly — see
- *          proxyDocument for why (gateway CORS/framing headers we don't control).
+ * @desc    Déchiffre et sert un document depuis notre propre origine — voir proxyDocument.
  * @access  Private (creator, signatory, or admin of the contract that owns this CID)
  */
 router.get('/proxy/:cid', authenticate, ipfsController.proxyDocument);
@@ -60,7 +60,7 @@ router.get('/:cid', authenticate, ipfsController.getDocumentMetadata);
 
 /**
  * @route   DELETE /api/ipfs/:cid
- * @desc    Unpin document from IPFS
+ * @desc    Supprime un document chiffré
  * @access  Private
  */
 router.delete('/:cid', authenticate, ipfsController.unpinDocument);

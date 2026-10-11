@@ -1,5 +1,5 @@
 {
-  "name": "contractifyblockchain",
+  "name": "cachetifyblockchain",
   "version": "1.0.0",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^4.0.0",

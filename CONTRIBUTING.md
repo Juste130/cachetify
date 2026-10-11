@@ -1,6 +1,6 @@
-# 🤝 Contributing to ContracTify
+# 🤝 Contributing to Cachetify
 
-Thank you for your interest in contributing to ContracTify! We welcome contributions from the community and appreciate your effort to improve our project.
+Thank you for your interest in contributing to Cachetify! We welcome contributions from the community and appreciate your effort to improve our project.
 
 ## 📋 Table of Contents
 
@@ -35,7 +35,7 @@ The following behaviors are not tolerated:
 - Doxxing or privacy violations
 - Spam or low-effort contributions
 
-**Reporting:** Contact [conduct@contractify.com](mailto:conduct@contractify.com) with details.
+**Reporting:** Contact [conduct@cachetify.com](mailto:conduct@cachetify.com) with details.
 
 ---
 
@@ -56,11 +56,11 @@ Ensure you have:
 ```bash
 # 1. Fork the repository on GitHub
 # 2. Clone your fork
-git clone https://github.com/YOUR_USERNAME/contractify.git
-cd contractify
+git clone https://github.com/YOUR_USERNAME/cachetify.git
+cd cachetify
 
 # 3. Add upstream remote
-git remote add upstream https://github.com/ORIGINAL_OWNER/contractify.git
+git remote add upstream https://github.com/ORIGINAL_OWNER/cachetify.git
 
 # 4. Create a feature branch
 git checkout -b feature/your-feature-name
@@ -105,7 +105,7 @@ cd frontend && npm run dev
 
 ### 1. Choose a Task
 
-- Browse [Issues](https://github.com/yourusername/contractify/issues)
+- Browse [Issues](https://github.com/yourusername/cachetify/issues)
 - Look for labels: `good-first-issue`, `help-wanted`, `bug`
 - Comment on the issue to claim it
 
@@ -513,16 +513,16 @@ Contributors are recognized in:
 
 ## 📞 Contact & Questions
 
-- 📧 **Email:** dev@contractify.com
-- 💬 **Discussions:** [GitHub Discussions](https://github.com/yourusername/contractify/discussions)
-- 🐛 **Issues:** [GitHub Issues](https://github.com/yourusername/contractify/issues)
+- 📧 **Email:** dev@cachetify.com
+- 💬 **Discussions:** [GitHub Discussions](https://github.com/yourusername/cachetify/discussions)
+- 🐛 **Issues:** [GitHub Issues](https://github.com/yourusername/cachetify/issues)
 
 ---
 
 ## 📜 License
 
-By contributing to ContracTify, you agree that your contributions will be licensed under the MIT License.
+By contributing to Cachetify, you agree that your contributions will be licensed under the MIT License.
 
 ---
 
-**Thank you for contributing to ContracTify! Together, we're building the future of blockchain contract management.** 🚀
+**Thank you for contributing to Cachetify! Together, we're building the future of blockchain contract management.** 🚀

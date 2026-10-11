@@ -31,6 +31,7 @@ export function usePrivySync() {
     const { privyLogin, isAuthenticated, user: storeUser } = useAuthStore();
     const [isSyncing, setIsSyncing] = useState(false);
     const syncInProgress = useRef(false);
+    const autoLoginTriggered = useRef(false);
 
     // "isAuthenticated" alone isn't enough: it can be stale-true from a PREVIOUS
     // person's session in this same browser if they switch Privy identity without our
@@ -92,6 +93,16 @@ export function usePrivySync() {
             login();
         }
     };
+
+    // /login et /signup ouvrent desormais la modale Privy toutes seules au chargement —
+    // le bouton de PrivyAuthCard reste affiche comme filet de securite (popup bloquee,
+    // ou modale fermee par erreur par l'utilisateur) plutot que de re-ouvrir en boucle.
+    useEffect(() => {
+        if (ready && !authenticated && !autoLoginTriggered.current) {
+            autoLoginTriggered.current = true;
+            login();
+        }
+    }, [ready, authenticated, login]);
 
     return { ready, isSyncing, handleLogin };
 }

@@ -58,7 +58,7 @@ export function InviteUserDialog({ trigger }: InviteUserDialogProps) {
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Inviter quelqu'un sur ContracTify</DialogTitle>
+          <DialogTitle>Inviter quelqu'un sur Cachetify</DialogTitle>
           <DialogDescription>
             Envoyez une invitation par email à une personne qui n'a pas encore de compte. Elle recevra un lien pour créer le sien gratuitement.
           </DialogDescription>

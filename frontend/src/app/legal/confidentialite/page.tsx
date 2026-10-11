@@ -6,7 +6,7 @@ const sections: LegalSection[] = [
     title: "1. Données collectées",
     content: (
       <p>
-        ContracTify collecte l'adresse e-mail utilisée à l'inscription, les informations saisies
+        Cachetify collecte l'adresse e-mail utilisée à l'inscription, les informations saisies
         dans les contrats (identités et coordonnées des parties, clauses, montants), les documents
         téléversés, et les métadonnées techniques nécessaires à la sécurité du service (journaux
         de connexion, adresse de portefeuille numérique).
@@ -20,9 +20,13 @@ const sections: LegalSection[] = [
       <p>
         Le service s'appuie sur des prestataires tiers pour fonctionner : Privy (authentification
         et gestion du portefeuille numérique), Groq (génération assistée par IA du texte des
-        contrats), Pinata/IPFS (stockage décentralisé des documents), et le réseau Polygon
-        (horodatage blockchain). Les documents ancrés sur IPFS et les données inscrites sur la
-        blockchain sont, par nature, difficiles voire impossibles à supprimer rétroactivement.
+        contrats, dont les coordonnées des parties sont retirées avant l'envoi), et le réseau
+        Polygon (horodatage blockchain). Les documents eux-mêmes sont chiffrés et conservés par
+        Cachetify, pas sur un réseau public : seule leur empreinte numérique, jamais leur
+        contenu, est inscrite sur la blockchain. Cette empreinte et les adresses des signataires,
+        une fois inscrites sur la blockchain, sont, par nature, difficiles voire impossibles à
+        supprimer rétroactivement — contrairement au document chiffré lui-même, que nous pouvons
+        supprimer de nos serveurs.
       </p>
     ),
   },
@@ -44,7 +48,7 @@ const sections: LegalSection[] = [
     content: (
       <p>
         Les mots de passe ne sont jamais stockés : l'authentification passe par Privy, qui gère
-        également la clé du portefeuille numérique de l'utilisateur sans que ContracTify n'y ait
+        également la clé du portefeuille numérique de l'utilisateur sans que Cachetify n'y ait
         directement accès. Les échanges avec le service sont chiffrés en transit. Le détail complet
         des mesures techniques (chiffrement au repos, gestion des accès internes, journalisation)
         reste à documenter précisément avant publication définitive.
@@ -57,7 +61,7 @@ const sections: LegalSection[] = [
     incomplete: true,
     content: (
       <p>
-        Les prestataires tiers utilisés (Privy, Groq, Pinata) peuvent traiter ou stocker des
+        Les prestataires tiers utilisés (Privy, Groq) peuvent traiter ou stocker des
         données en dehors du pays de résidence de l'utilisateur. Les garanties applicables à ces
         transferts (clauses contractuelles types ou équivalent) restent à formaliser avec un
         professionnel du droit.
@@ -72,11 +76,11 @@ const sections: LegalSection[] = [
       <p>
         Durées de conservation par type de donnée — à préciser avec un professionnel du droit.
         Distinction importante à retenir pour cette page : les données du compte (profil, e-mail)
-        peuvent en principe être supprimées sur demande, alors que le hash du document, sa version
-        archivée sur IPFS et les écritures de signature inscrites sur la blockchain sont, par
-        nature, difficiles voire impossibles à supprimer rétroactivement une fois publiées — ce
-        point doit être expliqué clairement à l'utilisateur avant toute signature, pas seulement
-        dans cette politique.
+        et le document chiffré lui-même peuvent en principe être supprimés sur demande, alors que
+        l'empreinte du document et les écritures de signature inscrites sur la blockchain sont,
+        par nature, difficiles voire impossibles à supprimer rétroactivement une fois publiées —
+        ce point doit être expliqué clairement à l'utilisateur avant toute signature, pas
+        seulement dans cette politique.
       </p>
     ),
   },
@@ -89,7 +93,7 @@ const sections: LegalSection[] = [
         Modalités d'exercice des droits d'accès, de rectification et de suppression — à préciser
         avant publication définitive, y compris les limites propres aux données déjà ancrées sur
         la blockchain (voir section 6). Un utilisateur souhaitant exercer ces droits pourra, à
-        terme, le faire via son compte ou en contactant ContracTify directement.
+        terme, le faire via son compte ou en contactant Cachetify directement.
       </p>
     ),
   },

@@ -120,13 +120,16 @@ exports.suggestClauses = async (req, res, next) => {
  */
 exports.validateContract = async (req, res, next) => {
     try {
-        const { contractText } = req.body;
+        const { contractText, partyAData, partyBData } = req.body;
 
         if (!contractText) {
             return res.status(400).json({ error: 'Contract text is required' });
         }
 
-        const result = await aiService.validateContract(contractText);
+        // partyAData/partyBData sont optionnels : quand le formulaire de création les
+        // fournit, le service masque en plus les champs personnels nominatifs avant l'envoi
+        // au modèle (voir services/ai.js, validateContract).
+        const result = await aiService.validateContract(contractText, { partyAData, partyBData });
 
         res.json({
             message: 'Contract validated successfully',

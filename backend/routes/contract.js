@@ -1,8 +1,13 @@
 const express = require('express');
+const multer = require('multer');
 const router = express.Router();
 const contractController = require('../controllers/contract');
 const { authenticate, requireAdmin } = require('../middleware/auth');
-const { resendLimiter } = require('../middleware/rate-limit');
+const { resendLimiter, verifyLimiter } = require('../middleware/rate-limit');
+
+// Le certificat officiel reste un PDF modeste (quelques pages) ; 10 Mo laisse une bonne
+// marge, la même limite que le dépôt de documents (routes/ipfs.js).
+const uploadCertificate = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 /**
  * @route   POST /api/contracts/draft
@@ -75,12 +80,22 @@ router.get('/search', authenticate, contractController.searchContracts);
 router.get('/:contractId', authenticate, contractController.getContractDetails);
 
 /**
- * @route   GET /api/contracts/verify/:id
- * @desc    Public, unauthenticated verification lookup (title, status, hash, signatories'
- *          names + signed status only) — what the QR code on a downloaded certificate points to
+ * @route   POST /api/contracts/:contractId/certificate
+ * @desc    Dépose le certificat officiel (une seule fois, le premier arrivé gagne) — voir
+ *          storeCertificate.
+ * @access  Private (creator, signatory, or admin of the contract)
+ */
+router.post('/:contractId/certificate', authenticate, uploadCertificate.single('file'), contractController.storeCertificate);
+
+/**
+ * @route   GET /api/contracts/verify/:token
+ * @desc    Public, unauthenticated verification lookup, gated by a non-guessable 128-bit
+ *          token (never a sequential contract id) — reference, status, hash and signatories'
+ *          initials only, never the title or a full name. This is what the QR code on a
+ *          downloaded certificate points to.
  * @access  Public
  */
-router.get('/verify/:id', contractController.getPublicVerification);
+router.get('/verify/:token', verifyLimiter, contractController.getPublicVerification);
 
 /**
  * @route   GET /api/contracts/admin/all

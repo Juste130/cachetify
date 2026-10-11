@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { incidentsApi, AdminIncident } from "@/lib/api/incidents";
 import { DISPUTE_REASON_LABELS, INCIDENT_STATUS_LABELS } from "@/lib/contract-incidents";
 import { useNotifications } from "@/hooks/useNotifications";
-import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -75,10 +74,8 @@ export function AdminIncidentsPage() {
     };
 
     return (
-        <div className="flex min-h-screen bg-muted">
-            <AppSidebar />
-
-            <main className="flex-1 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)', padding: '2rem' }}>
+        <>
+            <main className="flex-1 p-4 sm:p-6 md:p-8 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
                 <div className="mb-8">
                     <h1 className="mb-2">Litiges</h1>
                     <p className="text-muted-foreground">
@@ -116,6 +113,7 @@ export function AdminIncidentsPage() {
                                 <TableRow key={incident.id}>
                                     <TableCell
                                         className="font-medium cursor-pointer hover:underline"
+                                        onMouseEnter={() => router.prefetch(`/contract-details?id=${incident.contract.contractId ?? incident.contract.id}`)}
                                         onClick={() => router.push(`/contract-details?id=${incident.contract.contractId ?? incident.contract.id}`)}
                                     >
                                         {incident.contract.title}
@@ -172,6 +170,6 @@ export function AdminIncidentsPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </div>
+        </>
     );
 }

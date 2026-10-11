@@ -48,9 +48,10 @@ export default function Providers({ children }: { children: ReactNode }) {
       config={{
         loginMethods: ['email', 'google'],
         appearance: {
-          theme: 'dark',
-          accentColor: '#676FFF',
+          theme: '#212121',
+          accentColor: '#FFC107',
           logo: '/mark-seal.svg',
+          landingHeader: 'Connexion à Cachetify',
         },
         mfa: {
           noPromptOnMfaRequired: false,

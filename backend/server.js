@@ -6,6 +6,7 @@ const cookieParser = require('cookie-parser');
 const { config } = require('./config');
 const logger = require('./utils/logger');
 const { errorHandler } = require('./middleware/error-handler');
+const { verifyOrigin } = require('./middleware/verify-origin');
 const { generalLimiter } = require('./middleware/rate-limit');
 const blockchainSyncService = require('./services/blockchain-sync');
 const escrowScheduler = require('./services/escrow-scheduler');
@@ -21,7 +22,6 @@ const escrowRoutes = require('./routes/escrow');
 const incidentRoutes = require('./routes/incident');
 const notificationRoutes = require('./routes/notifications');
 const analyticsRoutes = require('./routes/analytics');
-const nftRoutes = require('./routes/nft');
 const kycRoutes = require('./routes/kyc');
 
 const app = express();
@@ -49,6 +49,11 @@ app.use(morgan('combined', {
     },
 }));
 
+// CSRF hardening: the accessToken cookie is sameSite:'none' in production (needed for a
+// frontend/API on separate domains), so this catches a cross-site request that would
+// otherwise ride along on that cookie — see verify-origin.js for the full reasoning.
+app.use('/api/', verifyOrigin);
+
 // Rate limiting
 app.use('/api/', generalLimiter);
 
@@ -71,8 +76,6 @@ app.use('/api/contracts', escrowRoutes);
 app.use('/api/contracts', incidentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/analytics', analyticsRoutes);
-// Public, unauthenticated on purpose — see routes/nft.js.
-app.use('/api/nft', nftRoutes);
 app.use('/api/kyc', kycRoutes);
 
 // NOTE: le job horaire de réconciliation des wallets a été retiré — avec Privy, le

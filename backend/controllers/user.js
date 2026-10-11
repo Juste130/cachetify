@@ -278,7 +278,7 @@ exports.activateUser = async (req, res, next) => {
 };
 
 /**
- * Invite someone who doesn't have a ContracTify account yet, by email. Available to any
+ * Invite someone who doesn't have a Cachetify account yet, by email. Available to any
  * authenticated user (not just admins) — from the dashboard, to invite a future
  * counterparty, or from the admin users panel. Privy handles the actual signup; this just
  * sends the email and keeps a lightweight record to throttle repeat invites.
@@ -293,7 +293,7 @@ exports.inviteUser = async (req, res, next) => {
 
         const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
         if (existingUser) {
-            throw new ConflictError('Cette personne a déjà un compte ContracTify');
+            throw new ConflictError('Cette personne a déjà un compte Cachetify');
         }
 
         // Throttle: at most one invitation to a given address every 24h, regardless of
@@ -306,7 +306,7 @@ exports.inviteUser = async (req, res, next) => {
         }
 
         const inviter = await prisma.user.findUnique({ where: { id: req.user.userId } });
-        const inviterName = inviter?.profileData?.name || inviter?.email || 'Un utilisateur ContracTify';
+        const inviterName = inviter?.profileData?.name || inviter?.email || 'Un utilisateur Cachetify';
 
         await emailService.sendInvitationEmail(normalizedEmail, inviterName);
         await prisma.invitation.create({ data: { email: normalizedEmail, invitedById: req.user.userId } });

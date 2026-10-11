@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import apiClient from "@/lib/api/client";
 import { analyticsApi, MonthlyStat } from "@/lib/api/analytics";
-import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -65,10 +64,7 @@ export function AdminAnalyticsPage() {
     }, []);
 
     return (
-        <div className="flex min-h-screen bg-muted">
-            <AppSidebar />
-
-            <main className="flex-1 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)', padding: '2rem' }}>
+        <main className="flex-1 p-4 sm:p-6 md:p-8 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
                 <div className="mb-8">
                     <h1 className="mb-2">Analytics</h1>
                     <p className="text-muted-foreground">
@@ -228,6 +224,5 @@ export function AdminAnalyticsPage() {
                     )}
                 </Card>
             </main>
-        </div>
     );
 }

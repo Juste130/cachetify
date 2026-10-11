@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { usersApi, AdminUser } from "@/lib/api/users";
 import { useAuthStore } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useNotifications";
-import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -200,10 +199,8 @@ export function AdminUsersPage() {
     };
 
     return (
-        <div className="flex min-h-screen bg-muted">
-            <AppSidebar />
-
-            <main className="flex-1 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)', padding: '2rem' }}>
+        <>
+            <main className="flex-1 p-4 sm:p-6 md:p-8 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
                 <div className="flex items-center justify-between mb-8">
                     <div>
                         <h1 className="mb-2">Gestion des utilisateurs</h1>
@@ -518,6 +515,6 @@ export function AdminUsersPage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
-        </div>
+        </>
     );
 }

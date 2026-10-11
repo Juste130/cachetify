@@ -10,6 +10,9 @@ export interface Contract {
      *  lib/utils/contractNaming.ts ("CTF-000042"), never render the bare integer. */
     reference: number;
     ipfsHash: string;
+    /** Jeton public non devinable vers lequel pointe le code QR du certificat — voir
+     *  /verify/[id]/page.tsx et pdfGenerator.ts. */
+    publicToken?: string;
     status:
     | 'DRAFT_WAITING_SIGNERS'
     | 'READY_TO_DEPLOY'
@@ -214,8 +217,10 @@ export const contractsApi = {
      * UUID. Deliberately returns only what's needed to verify authenticity, never the
      * contract's actual content or a signatory's contact details.
      */
-    async getPublicVerification(id: string | number): Promise<{
-        title: string;
+    /** id est le jeton public non devinable (publicToken), jamais un identifiant numérique
+     *  ni un UUID de brouillon — voir mémoire, chapitre 2, section Sécurité et protection des
+     *  données. Ni titre ni nom complet dans la réponse : voir toInitials côté serveur. */
+    async getPublicVerification(id: string): Promise<{
         reference: number;
         status: string;
         createdAt: string;
@@ -226,10 +231,40 @@ export const contractsApi = {
          *  contract rather than served from the cache — false means the on-chain read failed
          *  and the response fell back to the (still trustworthy, just not freshly-verified) cache. */
         verifiedOnChain: boolean;
-        signatories: { name: string | null; hasSigned: boolean }[];
+        signatories: { initials: string | null; hasSigned: boolean }[];
+        /** Empreinte SHA-256 du certificat officiel (le PDF avec code QR, ou pour un import
+         *  le document original fusionné avec ce certificat) — déposée une seule fois par
+         *  contrat via storeCertificate ci-dessous, servie ici depuis le cache. Distincte de
+         *  sha256Hash (celle du contenu brut) : la page publique doit pouvoir reconnaître
+         *  l'une ou l'autre des deux versions qu'un utilisateur peut redéposer. */
+        certificateSha256Hash: string | null;
     }> {
         try {
             const response = await apiClient.get(`/api/contracts/verify/${id}`);
+            return response.data;
+        } catch (error) {
+            throw new Error(handleApiError(error));
+        }
+    },
+
+    /**
+     * Dépose le certificat officiel (le PDF avec code QR) pour qu'il devienne, lui aussi,
+     * vérifiable plus tard sur la page publique — idempotent côté serveur : si un autre
+     * appel (un autre participant qui ouvrait la page au même moment) a déjà déposé le sien,
+     * `alreadyExisted` vaut `true` et c'est SA version qui est renvoyée, jamais la nôtre.
+     * Voir contract-details-page.tsx (dépôt et ancrage automatiques dès la page ouverte).
+     */
+    async storeCertificate(contractId: string, file: Blob, fileName = "certificate.pdf"): Promise<{
+        cid: string;
+        sha256Hash: string;
+        alreadyExisted: boolean;
+    }> {
+        try {
+            const formData = new FormData();
+            formData.append('file', file, fileName);
+            const response = await apiClient.post(`/api/contracts/${contractId}/certificate`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
             return response.data;
         } catch (error) {
             throw new Error(handleApiError(error));

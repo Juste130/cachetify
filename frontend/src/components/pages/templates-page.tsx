@@ -1,6 +1,5 @@
 "use client";
 
-import { AppSidebar } from "../layout/app-sidebar";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { AiBadge } from "../ui/ai-badge";
@@ -50,33 +49,26 @@ export function TemplatesPage() {
 
   if (!GALLERY_ENABLED) {
     return (
-      <div className="flex min-h-screen bg-muted">
-        <AppSidebar />
-        <main className="flex-1 transition-all duration-300 flex items-center justify-center" style={{ marginLeft: 'var(--sidebar-width, 256px)', padding: '2rem' }}>
-          <Card className="p-12 text-center max-w-md">
-            <FileSignature className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-            <h1 className="mb-2">Modèles de contrats</h1>
-            <p className="text-muted-foreground mb-6">
-              Cette page arrive prochainement. Pour créer un contrat, utilisez directement le bouton ci-dessous : le choix du type de contrat s'y fait déjà à la première étape.
-            </p>
-            <Link href="/create-contract">
-              <Button className="bg-[#FFC107] text-[#212121] hover:bg-[#FFB300]">
-                <Plus className="w-5 h-5 mr-2" />
-                Créer un contrat
-              </Button>
-            </Link>
-          </Card>
-        </main>
-      </div>
+      <main className="flex-1 p-4 sm:p-6 md:p-8 transition-all duration-300 flex items-center justify-center" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
+        <Card className="p-12 text-center max-w-md">
+          <FileSignature className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+          <h1 className="mb-2">Modèles de contrats</h1>
+          <p className="text-muted-foreground mb-6">
+            Cette page arrive prochainement. Pour créer un contrat, utilisez directement le bouton ci-dessous : le choix du type de contrat s'y fait déjà à la première étape.
+          </p>
+          <Link href="/create-contract">
+            <Button className="bg-[#FFC107] text-[#212121] hover:bg-[#FFB300]">
+              <Plus className="w-5 h-5 mr-2" />
+              Créer un contrat
+            </Button>
+          </Link>
+        </Card>
+      </main>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-muted">
-      {/* Sidebar will be positioned fixed, main content needs left margin */}
-      <AppSidebar />
-
-      <main className="flex-1 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)', padding: '2rem' }}>
+    <main className="flex-1 p-4 sm:p-6 md:p-8 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
@@ -136,6 +128,5 @@ export function TemplatesPage() {
           </Card>
         </div>
       </main>
-    </div>
   );
 }

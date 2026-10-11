@@ -9,7 +9,7 @@ export function LandingHeader() {
         <div className="flex items-center justify-between h-16">
           <Link href="/" className="flex items-center gap-2">
             <SealMark className="w-8 h-8 shrink-0" />
-            <span className="text-[#FFC107] text-lg font-bold tracking-tight">ContracTify</span>
+            <span className="text-[#FFC107] text-lg font-bold tracking-tight">Cachetify</span>
           </Link>
 
           <nav className="hidden md:flex items-center gap-8">

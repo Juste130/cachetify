@@ -5,15 +5,24 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/hooks/useAuth';
 import { Spinner } from '../ui/spinner';
 import { KycFirstPrompt } from '@/components/kyc/kyc-first-prompt';
+import { AppSidebar } from '@/components/layout/app-sidebar';
 
 const PUBLIC_PATHS = ['/', '/login', '/signup', '/how-it-works'];
 // Prefix-matched rather than exact: /verify/[id] is a dynamic route, and every id under it
 // must be reachable without an account — that's the entire point of the QR code printed on
-// a downloaded certificate (a third party scanning it has no ContracTify login).
+// a downloaded certificate (a third party scanning it has no Cachetify login).
 const PUBLIC_PATH_PREFIXES = ['/verify/'];
 
 function isPublicPath(pathname: string) {
     return PUBLIC_PATHS.includes(pathname) || PUBLIC_PATH_PREFIXES.some((p) => pathname.startsWith(p));
+}
+
+// Protégé, mais volontairement affiché plein écran, sans la barre latérale (vue de lecture
+// d'un document signé, sans distraction) — comportement déjà en place avant ce refactor.
+const NO_SIDEBAR_PATH_PREFIXES = ['/contract-view'];
+
+function isNoSidebarPath(pathname: string) {
+    return NO_SIDEBAR_PATH_PREFIXES.some((p) => pathname.startsWith(p));
 }
 
 interface ProtectedRouteProps {
@@ -74,9 +83,25 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
         return null;
     }
 
+    // AppSidebar (et tout ce qu'elle embarque, dont la cloche de notifications et son polling)
+    // vit ICI, une seule fois, au lieu d'être réinstanciée par chacune des pages qui l'utilisent
+    // — sans quoi chaque navigation démontait et remontait toute la barre latérale, avec un
+    // nouvel appel réseau pour les notifications à chaque fois. Next.js garde ce composant
+    // monté d'une navigation à l'autre puisqu'il ne fait plus partie de l'arbre remplacé par
+    // le routeur (voir la doc App Router sur les "shared layouts" pendant une transition
+    // client). /contract-view reste volontairement plein écran, sans barre latérale.
+    const showSidebar = !isPublicPath(pathname) && !isNoSidebarPath(pathname);
+
     return (
         <>
-            {children}
+            {showSidebar ? (
+                <div className="flex min-h-screen bg-muted">
+                    <AppSidebar />
+                    {children}
+                </div>
+            ) : (
+                children
+            )}
             <KycFirstPrompt />
         </>
     );

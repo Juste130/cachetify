@@ -6,12 +6,20 @@ interface SidebarContextType {
   isCollapsed: boolean;
   toggleSidebar: () => void;
   setCollapsed: (collapsed: boolean) => void;
+  /** Separate from isCollapsed on purpose: isCollapsed is the desktop
+   *  rail-vs-full-width state (persists across navigation), isMobileOpen is the
+   *  below-md off-canvas drawer's open/closed state (defaults shut, meant to close again
+   *  after every navigation rather than persist). */
+  isMobileOpen: boolean;
+  openMobileSidebar: () => void;
+  closeMobileSidebar: () => void;
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   const toggleSidebar = () => {
     setIsCollapsed(prev => !prev);
@@ -22,7 +30,16 @@ export function SidebarProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <SidebarContext.Provider value={{ isCollapsed, toggleSidebar, setCollapsed }}>
+    <SidebarContext.Provider
+      value={{
+        isCollapsed,
+        toggleSidebar,
+        setCollapsed,
+        isMobileOpen,
+        openMobileSidebar: () => setIsMobileOpen(true),
+        closeMobileSidebar: () => setIsMobileOpen(false),
+      }}
+    >
       {children}
     </SidebarContext.Provider>
   );

@@ -1,9 +1,19 @@
+const crypto = require('crypto');
 const blockchainSyncService = require('../services/blockchain-sync');
 const prisma = require('../models/prisma');
 const logger = require('../utils/logger');
 const emailService = require('../services/email');
 const escrowService = require('../services/escrow');
 const notificationService = require('../services/notification');
+const ipfsService = require('../services/ipfs');
+
+// Jeton public de vérification (128 bits, non devinable) : c'est vers `/verify/<jeton>` que
+// pointe le code QR du certificat, jamais vers l'identifiant numérique séquentiel du contrat
+// ni vers l'UUID interne du brouillon — voir mémoire, chapitre 2, section Sécurité et
+// protection des données ("Devinette de l'adresse de vérification").
+function generatePublicToken() {
+    return crypto.randomBytes(16).toString('base64url');
+}
 
 const MAX_SIGNATORIES = 20;
 
@@ -41,6 +51,13 @@ exports.saveDraft = async (req, res, next) => {
 
         if (!title || !title.trim()) {
             return res.status(400).json({ error: 'Title is required' });
+        }
+        // Not a full schema (this JSON blob legitimately varies a lot by flow — AI-generated
+        // vs imported PDF, signer enrichment added later by blockchain-sync...), but the
+        // client should never be able to hand this endpoint something that isn't even a
+        // plain object in the first place.
+        if (metadata !== undefined && metadata !== null && (typeof metadata !== 'object' || Array.isArray(metadata))) {
+            return res.status(400).json({ error: 'metadata must be a plain object' });
         }
         if (!Array.isArray(signatories) || signatories.length === 0) {
             return res.status(400).json({ error: 'At least one signatory is required' });
@@ -99,6 +116,7 @@ exports.saveDraft = async (req, res, next) => {
                     userId,
                     title,
                     ipfsHash: ipfsHash || null,
+                    publicToken: generatePublicToken(),
                     status: allRegistered ? 'READY_TO_DEPLOY' : 'DRAFT_WAITING_SIGNERS',
                     metadata,
                     lastSync: new Date(),
@@ -522,25 +540,107 @@ exports.getContractDetails = async (req, res, next) => {
     }
 };
 
+/**
+ * Dépose le certificat officiel (le document complet, signatures et QR code inclus) — une
+ * seule fois par contrat, jamais régénéré ensuite. La première requête qui arrive « gagne » :
+ * la mise à jour de `metadata` est conditionnée par une clause WHERE qui échoue si
+ * `certificateCid` est déjà renseigné, ce qui règle la course si deux participants
+ * chargeaient la page au même moment. Le corps de la réponse indique si CETTE requête a posé
+ * la version officielle (`alreadyExisted: false`) ou si une version existait déjà
+ * (`alreadyExisted: true`) — c'est ce qui dit au frontend s'il doit ancrer l'empreinte sur la
+ * blockchain ou si c'est déjà fait.
+ *
+ * Voir mémoire, chapitre 3 : c'est cette empreinte, ancrée séparément du texte d'origine, qui
+ * permet à "Vérifier un fichier" de reconnaître aussi bien le certificat que le texte source.
+ */
+exports.storeCertificate = async (req, res, next) => {
+    try {
+        const { contractId } = req.params;
+        if (!req.file) {
+            return res.status(400).json({ error: 'No file provided' });
+        }
+
+        const contract = await blockchainSyncService.getCachedContract(parseInt(contractId));
+        if (!contract) return res.status(404).json({ error: 'Contract not found' });
+        if (!(await hasContractAccess(contract, req.user))) {
+            return res.status(403).json({ error: 'Unauthorized' });
+        }
+
+        if (contract.metadata?.certificateCid) {
+            return res.json({
+                cid: contract.metadata.certificateCid,
+                sha256Hash: contract.metadata.certificateSha256Hash,
+                alreadyExisted: true,
+            });
+        }
+
+        const sha256Hash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
+        const { cid } = await ipfsService.uploadDocument(req.file.buffer, req.file.originalname, req.file.mimetype, req.user.userId);
+
+        const updated = await prisma.$executeRaw`
+            UPDATE contract_cache
+            SET metadata = jsonb_set(
+                jsonb_set(metadata, '{certificateCid}', to_jsonb(${cid}::text)),
+                '{certificateSha256Hash}', to_jsonb(${sha256Hash}::text)
+            )
+            WHERE id = ${contract.id} AND metadata->>'certificateCid' IS NULL
+        `;
+
+        if (updated === 0) {
+            // Quelqu'un d'autre a gagné la course entre-temps — on relit sa version, la
+            // nôtre reste stockée mais orpheline (inoffensif, jamais référencée nulle part).
+            const winner = await prisma.contractCache.findUnique({ where: { id: contract.id }, select: { metadata: true } });
+            return res.json({
+                cid: winner.metadata.certificateCid,
+                sha256Hash: winner.metadata.certificateSha256Hash,
+                alreadyExisted: true,
+            });
+        }
+
+        logger.info(`Certificat officiel déposé pour le contrat ${contractId} : ${cid}`);
+        res.json({ cid, sha256Hash, alreadyExisted: false });
+    } catch (error) {
+        next(error);
+    }
+};
+
 exports.hasContractAccess = hasContractAccess;
+exports.toInitials = toInitials;
+
+// Initiales d'un nom complet, pour la page publique : "Jean DOSSOU" -> "J.D.". Jamais le nom
+// entier — voir mémoire, chapitre 2, section Sécurité et protection des données
+// ("Exposition d'informations sur la page publique").
+function toInitials(fullName) {
+    if (!fullName || typeof fullName !== 'string') return null;
+    const initials = fullName
+        .trim()
+        .split(/\s+/)
+        .map((part) => part[0]?.toUpperCase())
+        .filter(Boolean)
+        .join('.');
+    return initials ? `${initials}.` : null;
+}
 
 /**
- * Public, unauthenticated verification lookup — this is what the QR code printed on every
- * downloaded certificate points to. A third party (a bank, a court, a business partner)
- * scanning it has no ContracTify account, so this deliberately returns only what's needed
- * to verify authenticity: title, status, integrity hash/CID, blockchain anchor, and
- * signatories reduced to name + signed status — never the contract's actual content, a
- * signatory's email, or anything else that would leak private information to anyone who
- * merely has the link.
+ * Vérification publique, sans authentification — ce que le code QR d'un certificat pointe.
+ * Un tiers (banque, tribunal, partenaire commercial) qui le scanne n'a pas de compte
+ * Cachetify, donc cette route ne renvoie volontairement que le nécessaire pour vérifier
+ * l'authenticité : référence, statut, empreinte, ancrage blockchain, et les signataires
+ * réduits à leurs initiales et à leur statut de signature — jamais le titre, un nom complet,
+ * un courriel, le contenu du contrat ni sa référence de stockage (voir plus bas).
+ *
+ * Uniquement joignable par un jeton non devinable (`publicToken`, 128 bits) : jamais par
+ * l'identifiant numérique séquentiel du contrat ni par l'UUID interne du brouillon, tous deux
+ * énumérables ou devinables.
  */
 exports.getPublicVerification = async (req, res, next) => {
     try {
-        const { id } = req.params;
-        const numericId = Number(id);
+        const { token } = req.params;
 
-        const contract = Number.isInteger(numericId) && String(numericId) === id
-            ? await prisma.contractCache.findUnique({ where: { contractId: numericId }, include: { signatories: true } })
-            : await prisma.contractCache.findUnique({ where: { id }, include: { signatories: true } });
+        const contract = await prisma.contractCache.findUnique({
+            where: { publicToken: token },
+            include: { signatories: true },
+        });
 
         if (!contract) return res.status(404).json({ error: 'Contract not found' });
 
@@ -548,7 +648,7 @@ exports.getPublicVerification = async (req, res, next) => {
         // everywhere else, ContractCache is the correct source (fast, cheap, and it carries
         // hybrid off-chain data — escrow, KYC, incidents — that never existed on-chain to begin
         // with). But the entire point of a *public* verification page is to let a stranger with
-        // no ContracTify account confirm a claim independently of ContracTify's own database —
+        // no Cachetify account confirm a claim independently of Cachetify's own database —
         // trusting the cache here would defeat that. So when this contract is deployed
         // (contractId set), re-derive status/hash/signatures from the chain itself and let that
         // override the cache; if the RPC call fails for any reason, fall back to the cache
@@ -582,27 +682,26 @@ exports.getPublicVerification = async (req, res, next) => {
             }
         }
 
-        // Deliberately NOT ipfsHash: a CID isn't an opaque identifier, it's the actual
-        // retrieval key for the full document on any public IPFS gateway
-        // (gateway.pinata.cloud/ipfs/{cid}) — for an import, the entire original PDF; for
-        // an AI-generated contract, its full rendered text. Including it here would let
-        // anyone who merely has the verification link (no account, no access check)
-        // reconstruct direct access to the private contract in one step, defeating the
-        // "never leak the contract's actual content" guarantee this endpoint promises.
-        // sha256Hash is a real digest either way (post-fix, even for an import — see
-        // computeFileSHA256 in create-contract-page.tsx) — sufficient to prove integrity
-        // without being a retrieval mechanism itself.
+        // Ni le titre (peut contenir des noms), ni ipfsHash (la référence de stockage donne
+        // accès au document une fois déchiffré) : voir le tableau des risques du chapitre 2.
+        // sha256Hash est une vraie empreinte dans tous les cas (y compris pour un import —
+        // voir computeFileSHA256 dans create-contract-page.tsx) — suffisant pour prouver
+        // l'intégrité sans être, lui, un moyen d'accès au document.
         res.json({
-            title: contract.title,
             reference: contract.reference,
             status,
             createdAt: contract.createdAt,
             contractId: contract.contractId,
             sha256Hash,
+            // Empreinte du certificat officiel (document complet + QR) — voir storeCertificate.
+            // Servie ici depuis notre base, jamais écrite sur la blockchain (seule l'empreinte
+            // du document source, sha256Hash ci-dessus, l'est) ni rerelue en direct sur la
+            // chaîne (limite connue, voir mémoire chapitre 3).
+            certificateSha256Hash: contract.metadata?.certificateSha256Hash || null,
             isExternalPdf: !!contract.metadata?.isExternalPdf,
             verifiedOnChain,
             signatories: contract.signatories.map((s) => ({
-                name: s.name || null,
+                initials: toInitials(s.name),
                 hasSigned: s.walletAddress ? signedAddresses.has(s.walletAddress.toLowerCase()) : false,
             })),
         });

@@ -7,6 +7,9 @@ export interface KycStatusResponse {
     kycVerifiedAt: string | null;
     kycCountry: string | null;
     hasSeenKycPrompt: boolean;
+    /** True when no real Smile ID credentials are configured server-side — the verification
+     *  is simulated and auto-approved rather than actually checked. */
+    mockMode: boolean;
 }
 
 export const kycApi = {

@@ -4,9 +4,10 @@ const logger = require('../utils/logger');
 const prisma = require('../models/prisma');
 const { isLikelyPdf } = require('../utils/pdf-signature');
 const { hasContractAccess } = require('./contract');
+const { AppError } = require('../utils/errors');
 
 /**
- * Upload document to IPFS
+ * Dépose et chiffre un document (plus d'upload vers un service tiers)
  */
 exports.uploadDocument = async (req, res, next) => {
     try {
@@ -99,33 +100,19 @@ exports.getDocumentMetadata = async (req, res, next) => {
 };
 
 /**
- * Serves a pinned document back to the browser from OUR OWN origin — normally straight from
- * this app's own database, never by the browser itself talking to a third-party IPFS
- * gateway. That used to be the design (browser iframe/fetch -> Pinata gateway directly), and
- * it kept failing in practice: gateways are free to send X-Frame-Options/CSP headers refusing
- * to be framed at all (Chrome's own "this content was blocked" page, which no iframe
- * `sandbox` value can override), enforce CORS rules that may or may not permit this app's
- * origin, restrict dedicated-gateway access, or simply have an outage — none of which this
- * app controls or can guarantee. An AI-generated contract never hits any of this because its
- * content already lives in our own database and is rendered straight from there; this
- * endpoint gives an imported PDF the exact same trust model.
+ * Sert un document déchiffré à la volée, depuis notre propre origine. Notre base de données
+ * chiffrée EST la source canonique désormais (plus de service tiers ni de repli) : un
+ * document manquant ou qui ne se déchiffre pas est une vraie erreur, pas un cas à contourner.
  *
- * IPFS + the on-chain sha256Hash remain the ONLY canonical record — IpfsDocument.fileData is
- * purely a verified serving cache, not a second source of truth the rest of the system
- * trusts blindly:
- *   - if a cached copy exists, its SHA-256 is recomputed and compared against the contract's
- *     certified hash (meaningful only for an imported PDF — see the isExternalPdf check
- *     below) before it's ever served; a mismatch is logged loudly and the cache is treated as
- *     unusable rather than served as if it were authoritative.
- *   - whenever the cache is missing or fails that check, this falls back to fetching the real
- *     bytes from IPFS (a server-to-server request — CORS/framing rules are a browser-only
- *     concept and simply don't apply here) and opportunistically re-caches that known-good
- *     copy, so a corrupted row self-heals from the canonical source on the very next view.
+ * L'empreinte SHA-256 du texte clair déchiffré est recomparée à celle certifiée par le
+ * contrat avant d'être servie (utile pour un document importé — voir isExternalPdf — dont le
+ * texte clair correspond exactement à ce hash ; pour un contrat rédigé par l'IA, le hash
+ * porte sur le texte brut, pas sur ce document mis en forme, donc rien à comparer ici).
  *
- * Gated the same way as viewing the contract itself (creator, signatory, or admin — see
- * hasContractAccess) rather than by IpfsDocument.uploadedBy: a signatory who isn't the
- * uploader still needs to preview the document they're about to sign, which the ownership
- * check on getDocumentMetadata/unpinDocument above would incorrectly deny.
+ * Gardé de la même façon que la consultation du contrat lui-même (créateur, signataire ou
+ * admin — voir hasContractAccess), et non par IpfsDocument.uploadedBy : un signataire qui
+ * n'est pas l'auteur du dépôt doit quand même pouvoir prévisualiser le document qu'il
+ * s'apprête à signer.
  */
 exports.proxyDocument = async (req, res, next) => {
     try {
@@ -141,46 +128,27 @@ exports.proxyDocument = async (req, res, next) => {
         }
 
         const document = await prisma.ipfsDocument.findUnique({ where: { cid } });
-        // sha256Hash only represents the FILE'S OWN bytes for an imported PDF (see
-        // computeFileSHA256 in create-contract-page.tsx). For an AI-generated contract it's
-        // the hash of the plain-text content, not of the styled HTML actually pinned here —
-        // there is nothing meaningful to cross-check the cached bytes against in that case.
+        if (!document) return res.status(404).json({ error: 'Document not found' });
+
+        const buffer = await ipfsService.decryptStoredDocument(document);
+
         const expectedHash = contract.metadata?.isExternalPdf ? contract.metadata?.sha256Hash : null;
-
-        let buffer = null;
-        let mimeType = document?.mimeType || null;
-
-        if (document?.fileData) {
-            const actualHash = crypto.createHash('sha256').update(document.fileData).digest('hex');
-            if (!expectedHash || actualHash === expectedHash) {
-                buffer = document.fileData;
-            } else {
-                logger.error(`[IPFS proxy] Cached copy for ${cid} does not match its certified hash (expected ${expectedHash}, got ${actualHash}) — falling back to IPFS`);
+        if (expectedHash) {
+            const actualHash = crypto.createHash('sha256').update(buffer).digest('hex');
+            if (actualHash !== expectedHash) {
+                logger.error(`[IPFS proxy] Document déchiffré pour ${cid} ne correspond pas au hash certifié (attendu ${expectedHash}, obtenu ${actualHash})`);
+                return next(new AppError('Le document stocké ne correspond plus à son empreinte certifiée', 409));
             }
         }
 
-        if (!buffer) {
-            const upstream = await fetch(ipfsService.getPublicUrl(cid));
-            if (!upstream.ok) {
-                logger.error(`IPFS proxy fetch failed for ${cid}: HTTP ${upstream.status}`);
-                return res.status(502).json({ error: 'Failed to fetch document from IPFS' });
-            }
-            buffer = Buffer.from(await upstream.arrayBuffer());
-            mimeType = mimeType || upstream.headers.get('content-type');
-
-            // Opportunistic backfill/self-heal: this document had no verified cache yet, or
-            // its cache just failed verification — cache these freshly-fetched, known-good
-            // (came straight from IPFS) bytes so the next view doesn't need the gateway at all.
-            if (document) {
-                prisma.ipfsDocument.update({ where: { cid }, data: { fileData: buffer } })
-                    .catch((err) => logger.error(`[IPFS proxy] Failed to cache document ${cid}:`, err));
-            }
-        }
-
-        res.setHeader('Content-Type', mimeType || 'application/octet-stream');
-        // "inline", never "attachment": the point is to display it in the app's own preview,
-        // not trigger a download dialog the moment the iframe/fetch touches it.
-        res.setHeader('Content-Disposition', 'inline');
+        res.setHeader('Content-Type', document.mimeType || 'application/octet-stream');
+        // "inline" par défaut, pour l'aperçu dans l'application. `?download=1` bascule sur
+        // "attachment" : c'est le fichier original, octet pour octet, celui dont l'empreinte
+        // est ancrée sur la blockchain — voir "Document à conserver pour la vérification" côté
+        // frontend. Ne jamais changer ces octets ici : toute transformation casserait la
+        // correspondance avec l'empreinte que l'utilisateur pourra recomparer plus tard.
+        const isDownload = req.query.download === '1';
+        res.setHeader('Content-Disposition', isDownload ? `attachment; filename="${document.fileName || 'document'}"` : 'inline');
         res.send(buffer);
     } catch (error) {
         next(error);

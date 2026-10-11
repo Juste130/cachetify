@@ -1,4 +1,6 @@
-# Optimisation gaz — ContractManager / ContractNFT
+# Optimisation gaz — ContractManager / ContractNFT (historique, dépassé)
+
+**Statut : dépassé.** `ContractManager.sol` a depuis été entièrement réécrit en une version simplifiée au périmètre du mémoire (séquestre, litige, résiliation, paiement et certificat NFT retirés ; `ContractNFT.sol` supprimé) et redéployé sous une nouvelle adresse — voir `SMART_CONTRACTS.md` pour l'état actuel. Les deux pistes reportées ci-dessous sont résolues par construction dans la nouvelle version : `ContractData` ne contient plus que des champs scalaires simples (plus de réordonnancement à coordonner), et l'événement `Notification` a été retiré. Le reste de ce document est conservé comme trace de la revue gaz du 7 septembre 2026 sur l'ancien contrat.
 
 Revue faite avant le redéploiement du **7 septembre 2026** (voir historique git pour le commit exact). Trois catégories : appliqué maintenant (sans risque, sans coordination), et deux pistes réelles mais **volontairement reportées**, documentées ici pour ne pas être oubliées.
 

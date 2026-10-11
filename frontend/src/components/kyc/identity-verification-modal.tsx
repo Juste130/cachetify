@@ -66,6 +66,7 @@ export function IdentityVerificationModal({ open, onClose, onVerified }: Identit
   const [selfieFile, setSelfieFile] = useState<File | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [mockMode, setMockMode] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const reset = () => {
@@ -78,9 +79,22 @@ export function IdentityVerificationModal({ open, onClose, onVerified }: Identit
   }
 
   const handleClose = () => {
-    reset()
+    // Only stop the in-flight poll here — NOT a full reset. Resetting `step` back to "form"
+    // at the same time the dialog starts closing made the success/pending screen visibly
+    // flash back to the blank form during Radix's 200ms exit animation (dialog.tsx keeps
+    // the content mounted for that whole duration). The next open() effect below now owns
+    // resetting state, so it only ever happens while the dialog is invisible.
+    if (pollRef.current) clearInterval(pollRef.current)
     onClose()
   }
+
+  // Fresh state (and a fresh read of whether Smile ID mock mode is active) every time the
+  // dialog is opened — not on close, see handleClose above.
+  useEffect(() => {
+    if (!open) return
+    reset()
+    kycApi.getStatus().then((s) => setMockMode(!!s.mockMode)).catch(() => {})
+  }, [open])
 
   useEffect(() => {
     return () => { if (pollRef.current) clearInterval(pollRef.current) }
@@ -143,6 +157,15 @@ export function IdentityVerificationModal({ open, onClose, onVerified }: Identit
             </DialogDescription>
           </div>
         </div>
+
+        {mockMode && (
+          <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/30 mb-2">
+            <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+              <span className="font-bold">Mode démo :</span> aucun prestataire de vérification n'est configuré. Cette vérification est simulée et approuvée automatiquement — aucun document n'est réellement contrôlé.
+            </p>
+          </div>
+        )}
 
         {step === "form" && (
           <div className="space-y-4 mt-4">

@@ -154,7 +154,7 @@ export const usersApi = {
     },
 
     /**
-     * Invite someone who doesn't have a ContracTify account yet, by email
+     * Invite someone who doesn't have a Cachetify account yet, by email
      */
     async inviteUser(email: string): Promise<{ message: string }> {
         try {

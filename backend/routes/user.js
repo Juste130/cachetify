@@ -62,7 +62,7 @@ router.post('/:userId/activate', authenticate, requireAdmin, userController.acti
 
 /**
  * @route   POST /api/users/invite
- * @desc    Invite someone without a ContracTify account yet, by email
+ * @desc    Invite someone without a Cachetify account yet, by email
  * @access  Private (any authenticated user)
  */
 router.post('/invite', authenticate, inviteLimiter, userController.inviteUser);

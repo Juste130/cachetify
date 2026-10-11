@@ -1,62 +1,29 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.19;
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-
-// Interface vers ContractNFT — ce contrat en est le owner et est seul habilité à minter
-// ou à mettre à jour le statut d'une preuve (voir deploy.ts pour le transfert de propriété).
-interface IContractNFT {
-    function mintContractNFT(
-        address to, 
-        string calldata ipfsHash, 
-        address[] calldata signers
-    ) external returns (uint256);
-    
-    function getContractProof(uint256 tokenId) external view returns (
-        string memory ipfsHash,
-        uint256 timestamp,
-        bool isActive,
-        address[] memory signers
-    );
-
-    function updateProofStatus(uint256 tokenId, bool active) external;
-
-    function owner() external view returns (address);
-}
-
 
 /**
  * @title ContractManager
- * @dev Gère la création et la gestion des ContractNFTs
+ * @dev Enregistrement et signature de contrats. Seules les informations suivantes sont
+ * écrites sur la chaîne : l'empreinte SHA-256 du document, sa référence de stockage, les
+ * adresses des signataires et la date de chaque signature (voir mémoire, chapitre 2,
+ * section Architecture). Inclut une pause d'urgence plateforme (chapitre 3).
  * @author Sènami Juste HOUEZO <houezojuste0@gmail.com>
  */
-contract ContractManager is Ownable, ReentrancyGuard {
+contract ContractManager is Ownable {
     uint256 private _contractIds;
-    uint256 private _paymentIds;
     address public emergencyAdmin;
     uint8 private _authorizedPauserCount;
 
     // Pause d'urgence — voir addAuthorizedPauser/removeAuthorizedPauser plus bas pour les
-    // règles d'autorisation, et emergencyPause/resumeContractPlatform pour leur usage.
+    // règles d'autorisation, et emergencyPause/resumeContract pour leur usage.
     bool public paused;
     uint40 public pausedAt;
     uint40 public constant MAX_PAUSE_DURATION = 30 days;
     uint8 public constant MAX_PAUSERS = 3;
 
-    IContractNFT public contractNFT;
-
-    enum ContractStatus { Draft, PendingSignatures, Active, Completed, Cancelled, Disputed, Terminated, Resigned }
-    enum TerminationReason {None, MutualAgreement, BreachOfContract, CompletionOfTerms, FraudOrMisrepresentation, ImpossibilityOfPerformance, ChangeInLaw, Other }
-    enum DisputeReason {None, NonPayment, PoorQualityWork, DelaysInPerformance, BreachOfConfidentiality, IntellectualPropertyDispute, Other }
-    enum PaymentStatus { None, Pending, Approved, Completed, Blocked, Overdue, Refunded, Disputed }
-    enum SignerRole { Creator, CoSigner, Witness, LegalRepresentative, Other}
-
-    struct ContractJustification {
-        string justification;
-        uint40 timestamp;
-        address updatedBy;
-    }
+    enum ContractStatus { PendingSignatures, Active }
+    enum SignerRole { Creator, CoSigner, Witness, LegalRepresentative, Other }
 
     struct SignerInfo {
         address signer;
@@ -66,26 +33,6 @@ contract ContractManager is Ownable, ReentrancyGuard {
         uint40 signedAt;
     }
 
-    struct TerminationInfo {
-        TerminationReason reason;
-        string customReason;
-        string proofIpfsHash;
-        ContractJustification justification;
-    }
-    struct DisputeInfo {
-        DisputeReason reason;
-        string customReason;
-        string proofIpfsHash;
-        ContractJustification justification;
-    }
-    struct PaymentInfo {
-        uint256 amount;
-        string currency; 
-        PaymentStatus status;
-        string proofIpfsHash;
-        ContractJustification justification;
-    }
-
     struct ContractData {
         uint256 id;
         address creator;
@@ -93,26 +40,13 @@ contract ContractManager is Ownable, ReentrancyGuard {
         uint40 expiresAt;
         uint40 effectiveDate;
         ContractStatus status;
-        bool allowTermination;
-        bool allowDispute;
-        TerminationInfo terminationInfo;
-        DisputeInfo disputeInfo;
-        uint88 escrowAmount;
-        uint8 penaltyPercent;
         string sha256Hash;
-        uint88 releasedAmount; //@dev Montant total déjà libéré
-        uint256 nftTokenId;
-        bool isEscrowDeposited;
-        address escrowPayer;
     }
 
     mapping(uint256 => ContractData) public contracts;
-    mapping(uint256 => string) public contractIpfsHashes; // contractId => ContractNFT address
-    mapping(uint256 => uint256[]) public contractPayments; // contractId => paymentIds
+    mapping(uint256 => string) public contractIpfsHashes; // contractId => référence de stockage
     mapping(uint256 => SignerInfo[]) public contractSigners;
     mapping(uint256 => mapping(address => bool)) public signatures;
-    mapping(uint256 => ContractJustification[]) public contractJustifications;
-    mapping(uint256 => PaymentInfo[]) public paymentInfos;
     mapping(address => uint256[]) public userContracts;
     mapping(string => bool) public ipfsHashUsed;
     mapping(address => bool) public authorizedPausers;
@@ -123,47 +57,6 @@ contract ContractManager is Ownable, ReentrancyGuard {
         uint40 createdAt,
         address[] additionalSigners
     );
-    event ContractStatusUpdated(
-        uint256 indexed contractId,
-        ContractStatus oldStatus,
-        ContractStatus newStatus,
-        string justification,
-        address updatedBy
-    );
-    event ContractTerminated(
-        uint256 indexed contractId,
-        TerminationReason reason,
-        string customReason,
-        string proofIpfsHash,
-        string justification,
-        address updatedBy
-    );
-    event ContractDisputed(
-        uint256 indexed contractId,
-        DisputeReason reason,
-        string customReason,
-        string proofIpfsHash,
-        string justification,
-        address updatedBy
-    );
-    event PaymentStatusUpdated(
-        uint256 indexed contractId,
-        uint256 indexed paymentId,
-        PaymentStatus oldStatus,
-        PaymentStatus newStatus,
-        string justification,
-        address updatedBy
-    );
-    event ContractJustificationAdded(
-        uint256 indexed contractId,
-        address indexed addedBy,
-        string justification
-    );
-    event SignatureRequired(
-        uint256 indexed contractId,
-        address indexed signer,
-        SignerRole role
-    );
     event ContractSigned(
         uint256 indexed contractId,
         address indexed signer,
@@ -171,50 +64,28 @@ contract ContractManager is Ownable, ReentrancyGuard {
     );
     event ContractFinalized(
         uint256 indexed contractId,
-        uint256 nftTokenId,
         uint40 effectiveDate
     );
-    event ContractCancelled(
-        uint256 indexed contractId,
-        address indexed cancelledBy,
-        string justification
-    );
-    event PaymentAdded(
-        uint256 indexed contractId,
-        uint256 indexed paymentId,
-        uint256 amount,
-        string currency
-    );
-    event JustificationAdded(
-        uint256 indexed contractId,
-        address indexed addedBy,
-        string justification
-    );
-    event Notification(
-        uint256 indexed contractId,
-        address indexed to,
-        string message
-    );
     event ContractPaused(
-        address indexed pauser, 
-        string reason, 
+        address indexed pauser,
+        string reason,
         uint40 timestamp
     );
     event ContractResumed(
-        address indexed resumer, 
-        string reason, uint40 
-        timestamp
+        address indexed resumer,
+        string reason,
+        uint40 timestamp
     );
     event EmergencyAdminUpdated(
-        address indexed oldAdmin, 
+        address indexed oldAdmin,
         address indexed newAdmin
     );
     event PauserAuthorizationUpdated(
-        address indexed pauser, 
+        address indexed pauser,
         bool authorized
     );
     event ForceResumeExecuted(
-        address indexed executor, 
+        address indexed executor,
         string reason
     );
 
@@ -222,100 +93,64 @@ contract ContractManager is Ownable, ReentrancyGuard {
         require(contractId > 0 && contractId <= _contractIds, "Invalid contract ID");
         _;
     }
-    modifier onlyContractCreator(uint256 contractId) {
-        require(contracts[contractId].creator == msg.sender, "Not contract creator");
-        _;
-    }
     modifier onlyParticipant(uint256 contractId) {
         require(_isContractParticipant(contractId, msg.sender), "Not a participant");
         _;
     }
-    modifier validJustification(string calldata justification) {
-        require(bytes(justification).length > 0 && bytes(justification).length <= 200, "Invalid justification length: 1-200 chars");
+    modifier validReason(string calldata reason) {
+        require(bytes(reason).length > 0 && bytes(reason).length <= 200, "Invalid reason length: 1-200 chars");
         _;
     }
     modifier whenNotPaused() {
         require(!paused, "Contract is paused");
         _;
     }
-    
+
     modifier whenPaused() {
         require(paused, "Contract is not paused");
         _;
     }
-    
+
     modifier onlyAuthorizedPauser() {
         require(
-            msg.sender == owner() || 
-            msg.sender == emergencyAdmin || 
+            msg.sender == owner() ||
+            msg.sender == emergencyAdmin ||
             authorizedPausers[msg.sender],
             "Not authorized to pause"
         );
         _;
     }
-    
+
     modifier onlyOwnerOrEmergencyAdmin() {
         require(
-            msg.sender == owner() || 
+            msg.sender == owner() ||
             msg.sender == emergencyAdmin,
             "Not authorized for this action"
         );
         _;
     }
 
-    /**
-     * @dev Constructeur avec vérification
-     */
-    constructor(address _contractNFTAddress) Ownable() ReentrancyGuard() {
-        require(_contractNFTAddress != address(0), "Invalid NFT contract address");
-        contractNFT = IContractNFT(_contractNFTAddress);
-
+    constructor() Ownable() {
         // Configuration initiale de sécurité
         emergencyAdmin = msg.sender; // Par défaut, le déployeur est emergencyAdmin
         paused = false;
-
-        // La propriété de ContractNFT ne peut PAS encore appartenir à ce contrat ici : il
-        // s'agit du script de déploiement standard (voir scripts/deploy.ts) où ContractNFT est
-        // déployé en premier, puis ContractManager, puis seulement ensuite `transferOwnership`
-        // vers ce contrat. Une vérification à ce stade ne peut donc que comparer le déployeur à
-        // lui-même — elle passait toujours, sans jamais rien vérifier de réel. La vraie garantie
-        // est portée ailleurs : `mintContractNFT` sur ContractNFT est `onlyOwner`, donc un
-        // transfert de propriété manqué ou raté se voit immédiatement (revert bruyant) au tout
-        // premier mint, plutôt que d'être masqué par une fausse vérification ici. Le script de
-        // déploiement vérifie désormais explicitement le transfert après coup, une fois qu'il
-        // peut réellement être vrai ou faux.
     }
 
     /**
      * @dev Crée un nouveau contrat avec rôles des signataires
-     * @param ipfsHash Hash IPFS du document de contrat
+     * @param ipfsHash Référence de stockage du document de contrat
      * @param sha256Hash Hash SHA256 du document (preuve d'intégrité)
      * @param signersWithRoles Tableau des signataires avec leurs rôles
      * @param expiresAt Date d'expiration du contrat
-     * @param allowTermination Permet la résiliation
-     * @param allowDispute Permet l'ouverture de litige
-     * @param escrowAmount Montant total du contrat placé en séquestre
-     * @param penaltyPercent Pourcentage de pénalité en cas de litige
-     * @param initialJustification Justification initiale
-     *
-     * nonReentrant : quand aucun signataire additionnel n'est requis, cette fonction
-     * finalise le contrat elle-meme (_finalizeContract), qui fait un appel externe (mint du
-     * NFT) — meme raison que sur signContract.
      */
     function createContract(
         string calldata ipfsHash,
         string calldata sha256Hash,
         SignerInfo[] calldata signersWithRoles,
-        uint40 expiresAt,
-        bool allowTermination,
-        bool allowDispute,
-        uint88 escrowAmount,
-        uint8 penaltyPercent,
-        string calldata initialJustification
-    ) external nonReentrant whenNotPaused validJustification(initialJustification) returns (uint256) {
+        uint40 expiresAt
+    ) external whenNotPaused returns (uint256) {
         require(!ipfsHashUsed[ipfsHash], "IPFS hash already used");
         require(expiresAt > uint40(block.timestamp), "Invalid expiration time");
-        require(penaltyPercent <= 100, "Penalty cannot exceed 100%");
         require(signersWithRoles.length <= 50, "Too many signers"); // Limite raisonnable
 
         _contractIds++;
@@ -327,13 +162,7 @@ contract ContractManager is Ownable, ReentrancyGuard {
         newContract.createdAt = uint40(block.timestamp);
         newContract.expiresAt = expiresAt;
         newContract.status = ContractStatus.PendingSignatures;
-        newContract.allowTermination = allowTermination;
-        newContract.allowDispute = allowDispute;
-        newContract.escrowAmount = escrowAmount;
-        newContract.penaltyPercent = penaltyPercent;
         newContract.sha256Hash = sha256Hash;
-        newContract.isEscrowDeposited = false;
-        newContract.releasedAmount = 0;
 
         contractIpfsHashes[newContractId] = ipfsHash;
         ipfsHashUsed[ipfsHash] = true;
@@ -355,7 +184,7 @@ contract ContractManager is Ownable, ReentrancyGuard {
         for (uint256 i = 0; i < signersWithRoles.length; i++) {
             require(signersWithRoles[i].signer != msg.sender, "Creator cannot be additional signer");
             require(signersWithRoles[i].signer != address(0), "Invalid signer address");
-            
+
             contractSigners[newContractId].push(SignerInfo({
                 signer: signersWithRoles[i].signer,
                 role: signersWithRoles[i].role,
@@ -366,32 +195,24 @@ contract ContractManager is Ownable, ReentrancyGuard {
 
             additionalSigners[i] = signersWithRoles[i].signer;
             _addUserContract(signersWithRoles[i].signer, newContractId);
-            emit SignatureRequired(newContractId, signersWithRoles[i].signer, signersWithRoles[i].role);
         }
-
-        // Ajout de la justification initiale
-        _addJustification(newContractId, initialJustification);
 
         emit ContractCreated(newContractId, msg.sender, expiresAt, additionalSigners);
         emit ContractSigned(newContractId, msg.sender, SignerRole.Creator);
 
         // Finalisation immédiate si aucun signataire additionnel
         if (signersWithRoles.length == 0) {
-            _finalizeContract(newContractId, "Auto-finalized: no additional signers");
+            _finalizeContract(newContractId);
         }
 
         return newContractId;
     }
 
     /**
-     * @dev Signature d'un contrat par un participant. nonReentrant car la derniere
-     * signature declenche _finalizeContract, qui fait un appel externe (mint du NFT sur
-     * ContractNFT) — cohérent avec depositEscrow/releaseEscrow/applyPenalty, qui protegent
-     * deja leurs propres appels externes de la meme facon.
+     * @dev Signature d'un contrat par un participant.
      */
     function signContract(uint256 contractId)
         external
-        nonReentrant
         whenNotPaused
         validContractId(contractId)
         onlyParticipant(contractId)
@@ -415,341 +236,25 @@ contract ContractManager is Ownable, ReentrancyGuard {
         }
 
         if (_allSignaturesCollected(contractId)) {
-            _finalizeContract(contractId, "All signatures collected");
+            _finalizeContract(contractId);
         }
     }
 
     /**
-     * @dev Annulation du contrat par le créateur
+     * @dev Finalisation automatique du contrat une fois toutes les signatures collectées.
      */
-    function cancelContract(uint256 contractId, string calldata justification) 
-        external 
-        whenNotPaused
-        validContractId(contractId) 
-        onlyContractCreator(contractId)
-        validJustification(justification)
-    {
-        require(uint40(block.timestamp) <= contracts[contractId].expiresAt, "Contract expired");
+    function _finalizeContract(uint256 contractId) internal {
         ContractData storage contractData = contracts[contractId];
-        require(contractData.status == ContractStatus.PendingSignatures, "Contract already finalized");
-        require(!_allSignaturesCollected(contractId), "All signatures already collected");
-
-        ContractStatus oldStatus = contractData.status;
-        contractData.status = ContractStatus.Cancelled;
-        
-        _addJustification(contractId, justification);
-        _notifyAllParticipants(contractId, "Contract cancelled by creator");
-
-        emit ContractStatusUpdated(contractId, oldStatus, ContractStatus.Cancelled, justification, msg.sender);
-        emit ContractCancelled(contractId, msg.sender, justification);
-    }
-
-    /**
-     * @dev Résiliation du contrat
-     */
-    function terminateContract(
-        uint256 contractId,
-        TerminationReason reason,
-        string calldata customReason,
-        string calldata proofIpfsHash,
-        string calldata justification
-    ) 
-        external 
-        whenNotPaused
-        validContractId(contractId)
-        onlyParticipant(contractId)
-        validJustification(justification)
-    {
-        require(uint40(block.timestamp) <= contracts[contractId].expiresAt, "Contract expired");
-        ContractData storage contractData = contracts[contractId];
-        require(contractData.allowTermination, "Termination not allowed");
-        require(contractData.status == ContractStatus.Active, "Contract not active");
-        require(!contractData.isEscrowDeposited, "Release or penalize escrow before terminating");
-        require(reason != TerminationReason.None, "Invalid termination reason");
-
-        ContractStatus oldStatus = contractData.status;
-        contractData.status = ContractStatus.Terminated;
-        
-        contractData.terminationInfo = TerminationInfo({
-            reason: reason,
-            customReason: customReason,
-            proofIpfsHash: proofIpfsHash,
-            justification: ContractJustification(justification, uint40(block.timestamp), msg.sender)
-        });
-
-        _addJustification(contractId, justification);
-        _notifyAllParticipants(contractId, "Contract terminated");
-        _deactivateProof(contractData.nftTokenId);
-
-        emit ContractStatusUpdated(contractId, oldStatus, ContractStatus.Terminated, justification, msg.sender);
-        emit ContractTerminated(contractId, reason, customReason, proofIpfsHash, justification, msg.sender);
-    }
-
-    /**
-     * @dev Ouverture d'un litige
-     */
-    function openDispute(
-        uint256 contractId,
-        DisputeReason reason,
-        string calldata customReason,
-        string calldata proofIpfsHash,
-        string calldata justification
-    ) 
-        external 
-        whenNotPaused
-        validContractId(contractId)
-        onlyParticipant(contractId)
-        validJustification(justification)
-    {
-        require(uint40(block.timestamp) <= contracts[contractId].expiresAt, "Contract expired");
-        ContractData storage contractData = contracts[contractId];
-        require(contractData.allowDispute, "Dispute not allowed");
-        require(contractData.status == ContractStatus.Active, "Contract not active");
-        require(reason != DisputeReason.None, "Invalid dispute reason");
-
-        ContractStatus oldStatus = contractData.status;
-        contractData.status = ContractStatus.Disputed;
-        
-        contractData.disputeInfo = DisputeInfo({
-            reason: reason,
-            customReason: customReason,
-            proofIpfsHash: proofIpfsHash,
-            justification: ContractJustification(justification, uint40(block.timestamp), msg.sender)
-        });
-
-        _addJustification(contractId, justification);
-        _notifyAllParticipants(contractId, "Contract disputed");
-        _deactivateProof(contractData.nftTokenId);
-
-        emit ContractStatusUpdated(contractId, oldStatus, ContractStatus.Disputed, justification, msg.sender);
-        emit ContractDisputed(contractId, reason, customReason, proofIpfsHash, justification, msg.sender);
-    }
-
-    /**
-     * @dev Ajout d'un paiement au contrat
-     */
-    function addPayment(
-        uint256 contractId,
-        uint256 amount,
-        string calldata currency,
-        string calldata proofIpfsHash
-    ) external whenNotPaused validContractId(contractId) onlyContractCreator(contractId) {
-        require(amount > 0 && amount <= type(uint88).max, "Amount must be > 0 and <= uint88 max");
-        _paymentIds++;
-        uint256 newPaymentId = _paymentIds;
-
-        PaymentInfo memory newPayment = PaymentInfo({
-            amount: amount,
-            currency: currency,
-            status: PaymentStatus.Pending,
-            proofIpfsHash: proofIpfsHash,
-            justification: ContractJustification("", 0, address(0))
-        });
-
-        paymentInfos[contractId].push(newPayment);
-        contractPayments[contractId].push(newPaymentId);
-
-        emit PaymentAdded(contractId, newPaymentId, amount, currency);
-        emit Notification(contractId, contracts[contractId].creator, string(abi.encodePacked("New payment added: ", _uintToString(amount), " ", currency)));
-    }
-
-    /**
-     * @dev Mise à jour du statut d'un paiement
-     */
-    function updatePaymentStatus(
-        uint256 contractId,
-        uint256 paymentIndex,
-        PaymentStatus newStatus,
-        string calldata justification
-    ) 
-        external 
-        whenNotPaused
-        validContractId(contractId)
-        onlyContractCreator(contractId)
-        validJustification(justification)
-    {
-        require(paymentIndex < paymentInfos[contractId].length, "Invalid payment index");
-        
-        PaymentInfo storage payment = paymentInfos[contractId][paymentIndex];
-        PaymentStatus oldStatus = payment.status;
-        payment.status = newStatus;
-        payment.justification = ContractJustification(justification, uint40(block.timestamp), msg.sender);
-
-        emit PaymentStatusUpdated(contractId, contractPayments[contractId][paymentIndex], oldStatus, newStatus, justification, msg.sender);
-        
-        // Mise à jour du montant libéré si paiement complété
-        if (newStatus == PaymentStatus.Completed) {
-            contracts[contractId].releasedAmount += uint88(payment.amount);
-        }
-    }
-
-    /**
-     * @dev Ajout d'une justification au contrat
-     */
-    function addJustification(uint256 contractId, string calldata justification) 
-        external 
-        whenNotPaused
-        validContractId(contractId)
-        onlyParticipant(contractId)
-        validJustification(justification)
-    {
-        _addJustification(contractId, justification);
-    }
-
-    // ==================== ESCROW FUNCTIONS (v4.0) ====================
-
-    /**
-     * @dev Dépôt des fonds dans l'Escrow
-     */
-    function depositEscrow(uint256 contractId) external payable nonReentrant whenNotPaused validContractId(contractId) onlyParticipant(contractId) {
-        ContractData storage contractData = contracts[contractId];
-        require(contractData.status == ContractStatus.Active, "Contract must be active");
-        require(!contractData.isEscrowDeposited, "Escrow already deposited");
-        // Sans ce garde-fou, un contrat sans escrow declare (escrowAmount == 0 — le cas de
-        // tous les contrats crees par l'app aujourd'hui, l'escrow reel etant gere hors-chaine,
-        // voir ContractCache/ContractEscrow cote backend) pouvait etre "deposé" a cout nul par
-        // n'importe quel participant : msg.value == 0 == escrowAmount passe trivialement. Ca
-        // ne deplace aucun fonds, mais ca marque isEscrowDeposited a true et designe
-        // l'appelant comme escrowPayer, ce qui bloque ensuite terminateContract (qui exige
-        // "Release or penalize escrow before terminating") tant que ce participant precis n'a
-        // pas agi — un vecteur de blocage exploitable independamment de toute intention
-        // malveillante (il suffit d'appeler la fonction directement, ex. via l'interface
-        // Etherscan du contrat).
-        require(contractData.escrowAmount > 0, "No escrow declared for this contract");
-        require(msg.value == contractData.escrowAmount, "Incorrect escrow amount");
-
-        contractData.isEscrowDeposited = true;
-        contractData.escrowPayer = msg.sender;
-        _addJustification(contractId, "Escrow funds deposited securely");
-        _notifyAllParticipants(contractId, "Escrow funds deposited");
-    }
-
-    /**
-     * @dev Libération des fonds au créateur 
-     */
-    function releaseEscrow(uint256 contractId) external nonReentrant whenNotPaused validContractId(contractId) onlyParticipant(contractId) {
-        ContractData storage contractData = contracts[contractId];
-        require(contractData.isEscrowDeposited, "No funds in escrow");
-        require(contractData.status == ContractStatus.Active, "Contract not active");
-        require(msg.sender == contractData.escrowPayer, "Only the escrow payer can release funds");
-
-        uint256 amountToRelease = contractData.escrowAmount;
-        contractData.isEscrowDeposited = false;
-        contractData.releasedAmount += uint88(amountToRelease);
-        contractData.status = ContractStatus.Completed;
-
-        (bool success, ) = payable(contractData.creator).call{value: amountToRelease}("");
-        require(success, "Transfer failed");
-
-        _addJustification(contractId, "Escrow funds released");
-        _notifyAllParticipants(contractId, "Escrow funds released successfully");
-        _deactivateProof(contractData.nftTokenId);
-    }
-
-    /**
-     * @dev Application de la pénalité de retard ou litige
-     */
-    function applyPenalty(uint256 contractId) external nonReentrant whenNotPaused validContractId(contractId) onlyParticipant(contractId) {
-        ContractData storage contractData = contracts[contractId];
-        require(contractData.isEscrowDeposited, "No funds in escrow");
-        require(contractData.status == ContractStatus.Active || contractData.status == ContractStatus.Disputed, "Invalid status for penalty");
-        require(msg.sender == contractData.escrowPayer, "Only the escrow payer can apply penalty");
-
-        uint256 penaltyAmount = (contractData.escrowAmount * contractData.penaltyPercent) / 100;
-        uint256 remainingAmount = contractData.escrowAmount - penaltyAmount;
-
-        contractData.isEscrowDeposited = false;
-        contractData.releasedAmount += uint88(remainingAmount);
-        contractData.status = ContractStatus.Completed;
-
-        // Return penalty to the payer
-        (bool pSuccess, ) = payable(contractData.escrowPayer).call{value: penaltyAmount}("");
-        require(pSuccess, "Penalty transfer failed");
-
-        // Send remaining to creator
-        (bool rSuccess, ) = payable(contractData.creator).call{value: remainingAmount}("");
-        require(rSuccess, "Remaining transfer failed");
-
-        _addJustification(contractId, "Penalty applied and funds distributed");
-        _notifyAllParticipants(contractId, "Penalty applied due to conditions met");
-        _deactivateProof(contractData.nftTokenId);
-    }
-
-     /**
-     * @dev Finalisation automatique du contrat avec création du NFT
-     */
-    function _finalizeContract(uint256 contractId, string memory justification) internal {
-        require(uint40(block.timestamp) <= contracts[contractId].expiresAt, "Contract expired");
-        ContractData storage contractData = contracts[contractId];
-        ContractStatus oldStatus = contractData.status;
-
         contractData.status = ContractStatus.Active;
         contractData.effectiveDate = uint40(block.timestamp);
 
-        // Création du NFT seulement ici, après toutes les signatures et après la mise à
-        // jour de l'état ci-dessus (pattern Checks-Effects-Interactions)
-        uint256 nftTokenId = _mintContractNFT(contractId);
-        contractData.nftTokenId = nftTokenId;
-
-        _addJustification(contractId, justification);
-        _notifyAllParticipants(contractId, "Contract finalized and active");
-
-        emit ContractStatusUpdated(contractId, oldStatus, ContractStatus.Active, justification, contractData.creator);
-        emit ContractFinalized(contractId, nftTokenId, contractData.effectiveDate);
-    }
-
-    /**
-     * @dev Signale au ContractNFT que le contrat n'est plus en vigueur (résilié, en litige, ou
-     * clos via l'escrow) — sans quoi isActive restait figé à true depuis le mint, à vie, sur la
-     * preuve on-chain. Factorisé en une seule fonction (au lieu d'inliner l'appel externe à
-     * chaque site d'appel) car ces 4 sites dupliqués faisaient dépasser la limite de taille de
-     * contrat EIP-170 au déploiement.
-     */
-    function _deactivateProof(uint256 nftTokenId) internal {
-        if (nftTokenId > 0) {
-            contractNFT.updateProofStatus(nftTokenId, false);
-        }
-    }
-
-    /**
-     * @dev Mint le NFT de preuve après toutes les signatures
-     */
-    function _mintContractNFT(uint256 contractId) internal returns (uint256) {
-        // A single field, not `ContractData memory contractData = contracts[contractId]` —
-        // the old version copied the ENTIRE struct into memory (both TerminationInfo and
-        // DisputeInfo nested structs, each holding several `string` fields) just to read
-        // `.creator` below. One SLOAD instead of copying the whole thing.
-        address creator = contracts[contractId].creator;
-
-        // Récupération de tous les signataires pour le NFT — `storage`, same reasoning as
-        // _getAllParticipants: only `.signer` is read per element.
-        SignerInfo[] storage signers = contractSigners[contractId];
-        address[] memory signerAddresses = new address[](signers.length);
-
-        for (uint256 i = 0; i < signers.length; i++) {
-            signerAddresses[i] = signers[i].signer;
-        }
-
-        // Appel externe vers ContractNFT pour créer la preuve — après mise à jour de l'état
-        // du contrat dans _finalizeContract (pattern Checks-Effects-Interactions).
-        uint256 tokenId = contractNFT.mintContractNFT(
-            creator,                         // Propriétaire du NFT
-            contractIpfsHashes[contractId], // Hash IPFS du document
-            signerAddresses                 // Tous les signataires
-        );
-        require(tokenId > 0, "NFT minting failed"); // Simple vérification
-
-        return tokenId;
+        emit ContractFinalized(contractId, contractData.effectiveDate);
     }
 
     /**
      * @dev Vérifie si toutes les signatures sont collectées
      */
     function _allSignaturesCollected(uint256 contractId) internal view returns (bool) {
-        // `storage`, not `memory`: this only ever reads `.hasSignedContract` per element, but
-        // a `memory` copy of the whole array pays to copy every field of every SignerInfo —
-        // including `customRole`, a `string` — for data this loop never touches. A `storage`
-        // pointer costs an SLOAD per field actually read instead.
         SignerInfo[] storage signers = contractSigners[contractId];
 
         for (uint256 i = 0; i < signers.length; i++) {
@@ -761,22 +266,9 @@ contract ContractManager is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Ajout d'une justification
-     */
-    function _addJustification(uint256 contractId, string memory justification) internal {
-        contractJustifications[contractId].push(
-            ContractJustification(justification, uint40(block.timestamp), msg.sender)
-        );
-        emit JustificationAdded(contractId, msg.sender, justification);
-    }
-
-    /**
      * @dev Vérifie si l'adresse est un participant
      */
     function _isContractParticipant(uint256 contractId, address user) internal view returns (bool) {
-        // `storage`: same reasoning as _allSignaturesCollected above — only `.signer` is ever
-        // read here, a `memory` copy would pay to duplicate every SignerInfo's `customRole`
-        // string too, on every single call to onlyParticipant.
         SignerInfo[] storage signers = contractSigners[contractId];
 
         for (uint256 i = 0; i < signers.length; i++) {
@@ -794,112 +286,21 @@ contract ContractManager is Ownable, ReentrancyGuard {
         userContracts[user].push(contractId);
     }
 
-    /**
-     * @dev Notification de tous les participants
-     */
-    function _notifyAllParticipants(uint256 contractId, string memory message) internal {
-        address[] memory allParticipants = _getAllParticipants(contractId);
-        for (uint256 i = 0; i < allParticipants.length; i++) {
-            emit Notification(contractId, allParticipants[i], message);
-        }
-    }
-
-    /**
-     * @dev Récupère tous les participants
-     */
-    function _getAllParticipants(uint256 contractId) internal view returns (address[] memory) {
-        // `storage` for the source — only `.signer` is read per element; the `memory` array
-        // built below is the actual return value this function needs, not a full copy of the
-        // source (which would also duplicate every `customRole` string for nothing).
-        SignerInfo[] storage signers = contractSigners[contractId];
-        address[] memory participants = new address[](signers.length);
-        
-        for (uint256 i = 0; i < signers.length; i++) {
-            participants[i] = signers[i].signer;
-        }
-        
-        return participants;
-    }
-
-    /**
-     * @dev Récupère les infos du NFT via l'interface
-     */
-    function getNFTProof(uint256 contractId) 
-        external 
-        view 
-        validContractId(contractId)
-        returns (
-            string memory ipfsHash,
-            uint256 timestamp,
-            bool isActive,
-            address[] memory signers
-        )
-    {
-        uint256 nftTokenId = contracts[contractId].nftTokenId;
-        require(nftTokenId > 0, "No NFT minted for this contract");
-        
-        return contractNFT.getContractProof(nftTokenId);
-    }
-
-    /**
-     * @dev Conversion uint en string
-     */
-    function _uintToString(uint256 value) internal pure returns (string memory) {
-        if (value == 0) return "0";
-        
-        uint256 temp = value;
-        uint256 digits;
-        while (temp != 0) {
-            digits++;
-            temp /= 10;
-        }
-        
-        bytes memory buffer = new bytes(digits);
-        while (value != 0) {
-            digits -= 1;
-            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
-            value /= 10;
-        }
-        return string(buffer);
-    }
-
     // ==================== FONCTIONS DE LECTURE ====================
 
-    function getContractDetails(uint256 contractId) 
-        external 
-        view 
+    function getContractDetails(uint256 contractId)
+        external
+        view
         validContractId(contractId)
         returns (
             ContractData memory contractData,
             SignerInfo[] memory signers,
-            bool allSigned,
-            uint256 justificationCount,
-            uint256 paymentCount
+            bool allSigned
         )
     {
         contractData = contracts[contractId];
         signers = contractSigners[contractId];
         allSigned = _allSignaturesCollected(contractId);
-        justificationCount = contractJustifications[contractId].length;
-        paymentCount = paymentInfos[contractId].length;
-    }
-
-    function getContractJustifications(uint256 contractId) 
-        external 
-        view 
-        validContractId(contractId)
-        returns (ContractJustification[] memory)
-    {
-        return contractJustifications[contractId];
-    }
-
-    function getContractPayments(uint256 contractId) 
-        external 
-        view 
-        validContractId(contractId)
-        returns (PaymentInfo[] memory)
-    {
-        return paymentInfos[contractId];
     }
 
     function getUserContracts(address user) external view returns (uint256[] memory) {
@@ -909,36 +310,18 @@ contract ContractManager is Ownable, ReentrancyGuard {
     /**
      * @dev Récupère les détails des signataires avec leurs rôles
      */
-    function getContractSignersWithRoles(uint256 contractId) 
-        external 
-        view 
+    function getContractSignersWithRoles(uint256 contractId)
+        external
+        view
         validContractId(contractId)
         returns (SignerInfo[] memory)
     {
         return contractSigners[contractId];
     }
 
-    /**
-     * @dev Récupère le rôle d'un signataire spécifique
-     */
-    function getSignerRole(uint256 contractId, address signer) 
-        external 
-        view 
-        validContractId(contractId)
-        returns (SignerRole role, string memory customRole, bool hasSignedContract, uint40 signedAt)
-    {
-        SignerInfo[] memory signers = contractSigners[contractId];
-        for (uint256 i = 0; i < signers.length; i++) {
-            if (signers[i].signer == signer) {
-                return (signers[i].role, signers[i].customRole, signers[i].hasSignedContract, signers[i].signedAt);
-            }
-        }
-        revert("Signer not found");
-    }
-
-    function hasSigned(uint256 contractId, address signer) 
-        external 
-        view 
+    function hasSigned(uint256 contractId, address signer)
+        external
+        view
         validContractId(contractId)
         returns (bool)
     {
@@ -948,47 +331,44 @@ contract ContractManager is Ownable, ReentrancyGuard {
     function getTotalContracts() external view returns (uint256) {
         return _contractIds;
     }
-    function getTotalPayments() external view returns (uint256) {
-        return _paymentIds;
-    }
 
     // ==================== FONCTIONS DE PAUSE ====================
     /**
      * @dev Pause d'urgence avec raison détaillée
      * @param reason Justification transparente de la pause
      */
-    function emergencyPause(string calldata reason) 
-        external 
+    function emergencyPause(string calldata reason)
+        external
         onlyAuthorizedPauser
         whenNotPaused
-        validJustification(reason)
+        validReason(reason)
     {
         paused = true;
         pausedAt = uint40(block.timestamp);
-        
+
         emit ContractPaused(msg.sender, reason, pausedAt);
     }
     /**
-     * @dev Reprise du contrat après résolution 
+     * @dev Reprise du contrat après résolution
      * @param reason Explication de la reprise
      */
-    function resumeContract(string calldata reason) 
-        external 
+    function resumeContract(string calldata reason)
+        external
         onlyOwnerOrEmergencyAdmin
         whenPaused
-        validJustification(reason)
+        validReason(reason)
     {
         // Empêche un owner malveillant de mettre en pause puis de reprendre aussitôt pour
         // gêner les utilisateurs par a-coups — l'emergencyAdmin reste exempté de ce délai
         // minimum pour pouvoir réagir vite à un vrai incident.
         require(
-            block.timestamp >= pausedAt + 1 hours || 
+            block.timestamp >= pausedAt + 1 hours ||
             msg.sender == emergencyAdmin,
             "Minimum pause duration not reached (1 hour)"
         );
-        
+
         paused = false;
-        
+
         emit ContractResumed(msg.sender, reason, uint40(block.timestamp));
     }
     /**
@@ -1000,11 +380,11 @@ contract ContractManager is Ownable, ReentrancyGuard {
             block.timestamp > pausedAt + MAX_PAUSE_DURATION,
             "Max pause duration not reached"
         );
-        
+
         paused = false;
-        
+
         emit ForceResumeExecuted(
-            msg.sender, 
+            msg.sender,
             "Community force resume after max pause duration"
         );
     }
@@ -1017,10 +397,10 @@ contract ContractManager is Ownable, ReentrancyGuard {
         require(newAdmin != address(0), "Invalid address");
         require(newAdmin != owner(), "Cannot be same as owner");
         require(newAdmin != emergencyAdmin, "Already set to this address");
-        
+
         address oldAdmin = emergencyAdmin;
         emergencyAdmin = newAdmin;
-        
+
         emit EmergencyAdminUpdated(oldAdmin, newAdmin);
     }
     /**
@@ -1031,11 +411,11 @@ contract ContractManager is Ownable, ReentrancyGuard {
         require(pauser != address(0), "Invalid address");
         require(!authorizedPausers[pauser], "Already authorized");
         require(pauser != owner() && pauser != emergencyAdmin, "Cannot add owner/emergencyAdmin as pauser");
-        
+
         // Plafonné volontairement bas — chaque pauser supplémentaire est un compte de plus
         // capable de geler toute la plateforme, pas une fonctionnalité à distribuer largement.
         require(_authorizedPauserCount < MAX_PAUSERS, "Maximum pausers reached");
-        
+
         authorizedPausers[pauser] = true;
         _authorizedPauserCount++;
         emit PauserAuthorizationUpdated(pauser, true);
@@ -1046,7 +426,7 @@ contract ContractManager is Ownable, ReentrancyGuard {
      */
     function revokePauser(address pauser) external onlyOwner {
         require(authorizedPausers[pauser], "Not an authorized pauser");
-        
+
         authorizedPausers[pauser] = false;
         _authorizedPauserCount--;
         emit PauserAuthorizationUpdated(pauser, false);

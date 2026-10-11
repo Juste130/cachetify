@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import apiClient from "@/lib/api/client";
 import { useAuthStore } from "@/hooks/useAuth";
 import { useContract } from "@/hooks/useContract";
-import { AppSidebar } from "@/components/layout/app-sidebar";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -110,10 +109,7 @@ export function AdminSystemPage() {
     };
 
     return (
-        <div className="flex min-h-screen bg-muted">
-            <AppSidebar />
-
-            <main className="flex-1 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)', padding: '2rem' }}>
+        <main className="flex-1 p-4 sm:p-6 md:p-8 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
                 <div className="mb-8">
                     <h1 className="mb-2">Paramètres système</h1>
                     <p className="text-muted-foreground">
@@ -352,6 +348,5 @@ export function AdminSystemPage() {
                     </div>
                 </Card>
             </main>
-        </div>
     );
 }

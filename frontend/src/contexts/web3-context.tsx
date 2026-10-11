@@ -81,7 +81,7 @@ export function Web3Provider({ children }: { children: ReactNode }) {
       const hexChainId: string = await eip1193provider.request({ method: 'eth_chainId' })
       const actual = parseInt(hexChainId, 16)
       if (actual !== EXPECTED_CHAIN_ID) {
-        throw new Error(`Mauvais réseau : votre wallet est sur la chaîne ${actual}, mais ContracTify fonctionne sur la chaîne ${EXPECTED_CHAIN_ID} (Polygon Amoy). Changez de réseau dans votre wallet avant de continuer.`)
+        throw new Error(`Mauvais réseau : votre wallet est sur la chaîne ${actual}, mais Cachetify fonctionne sur la chaîne ${EXPECTED_CHAIN_ID} (Polygon Amoy). Changez de réseau dans votre wallet avant de continuer.`)
       }
     } catch (err: any) {
       if (err?.message?.startsWith('Mauvais réseau')) throw err

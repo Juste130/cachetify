@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AppSidebar } from "../layout/app-sidebar";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Card } from "../ui/card";
@@ -12,6 +11,7 @@ import { Spinner } from "../ui/spinner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { contractsApi } from "@/lib/api/contracts";
+import { ipfsApi } from "@/lib/api/ipfs";
 import { getEffectiveStatus, getStatusBadgeVariant } from "@/lib/contract-status";
 import { formatReference } from "@/lib/utils/contractNaming";
 import {
@@ -97,10 +97,7 @@ export function ContractsPage() {
   });
 
   return (
-    <div className="flex min-h-screen bg-muted">
-      <AppSidebar />
-
-      <main className="flex-1 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)', padding: '2rem' }}>
+    <main className="flex-1 p-4 sm:p-6 md:p-8 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
@@ -185,6 +182,12 @@ export function ContractsPage() {
                   <TableRow
                     key={contract.id}
                     className="cursor-pointer hover:bg-muted/50"
+                    // Une ligne de tableau ne peut pas être un <Link> (pas de <a> valide autour
+                    // d'un <tr>), donc elle n'a jamais le prefetch automatique au survol que
+                    // next/link offre — router.prefetch() reproduit ce même comportement à la
+                    // main : la page de détail est déjà en mémoire côté client au moment du
+                    // clic, au lieu de partir d'une navigation à froid.
+                    onMouseEnter={() => router.prefetch(`/contract-details?id=${contract.contractId ?? contract.id}`)}
                     onClick={() => router.push(`/contract-details?id=${contract.contractId ?? contract.id}`)}
                   >
                     <TableCell>
@@ -221,12 +224,16 @@ export function ContractsPage() {
                             Détails
                           </DropdownMenuItem>
                           {contract.ipfsHash && (
+                            // Les documents ne sont plus publiés sur une passerelle IPFS
+                            // publique depuis le chiffrement (voir A1, mémoire chapitre 2) —
+                            // cette route interne les déchiffre pour un participant
+                            // authentifié. Un lien Pinata brut ici ne servirait plus rien.
                             <DropdownMenuItem onClick={(e) => {
                               e.stopPropagation();
-                              window.open(`https://gateway.pinata.cloud/ipfs/${contract.ipfsHash}`, '_blank');
+                              window.open(ipfsApi.getPublicUrl(contract.ipfsHash), '_blank');
                             }}>
                               <Download className="w-4 h-4 mr-2" />
-                              Voir sur IPFS
+                              Voir le document
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem disabled className="opacity-50 cursor-not-allowed">
@@ -265,7 +272,6 @@ export function ContractsPage() {
             </div>
           </Card>
         )}
-      </main>
-    </div>
+    </main>
   );
 }

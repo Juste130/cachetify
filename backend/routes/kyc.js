@@ -2,6 +2,11 @@ const express = require('express');
 const router = express.Router();
 const kycController = require('../controllers/kyc');
 const { authenticate } = require('../middleware/auth');
+const { requireFeature } = require('../middleware/feature-flag');
+
+// Vérification d'identité hors périmètre du mémoire de licence : masquée par défaut — voir
+// config.features.kyc.
+router.use(requireFeature('kyc'));
 
 /**
  * @route   GET /api/kyc/status
@@ -28,7 +33,7 @@ router.post('/dismiss-prompt', authenticate, kycController.dismissPrompt);
  * @route   POST /api/kyc/callback
  * @desc    Smile ID's async result webhook
  * @access  Public (gated by signature verification inside the controller, not by session —
- *          Smile ID's servers have no ContracTify auth cookie to send)
+ *          Smile ID's servers have no Cachetify auth cookie to send)
  */
 router.post('/callback', kycController.callback);
 

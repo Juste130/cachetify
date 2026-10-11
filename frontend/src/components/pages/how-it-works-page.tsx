@@ -101,7 +101,7 @@ export function HowItWorksPage() {
             <span className="text-sm">Propulsé par l'intelligence artificielle</span>
           </div>
 
-          <h1 className="mb-6">Comment fonctionne ContracTify ?</h1>
+          <h1 className="mb-6">Comment fonctionne Cachetify ?</h1>
 
           <p className="text-xl text-muted-foreground mb-8">
             Créez des contrats professionnels en 4 étapes simples, grâce à l'IA
@@ -206,7 +206,7 @@ export function HowItWorksPage() {
       <section className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="container mx-auto max-w-6xl">
           <div className="text-center mb-12">
-            <h2 className="mb-4">Les avantages de ContracTify</h2>
+            <h2 className="mb-4">Les avantages de Cachetify</h2>
             <p className="text-lg text-muted-foreground">
               Découvrez pourquoi entreprises et indépendants nous font confiance
             </p>
@@ -272,7 +272,7 @@ export function HowItWorksPage() {
                   Chaque contrat signé est enregistré sur Polygon, un réseau blockchain public,
                   garantissant une preuve d'horodatage immuable. Cette technologie assure que vos
                   documents ne peuvent pas être modifiés rétroactivement et fournit une piste
-                  d'audit complète. ContracTify est actuellement en phase de test sur le réseau
+                  d'audit complète. Cachetify est actuellement en phase de test sur le réseau
                   Polygon Amoy, avant un déploiement sur le réseau principal.
                 </p>
               </div>
@@ -286,7 +286,7 @@ export function HowItWorksPage() {
         <div className="container mx-auto max-w-4xl text-center">
           <h2 className="mb-6">Prêt à simplifier vos contrats ?</h2>
           <p className="text-xl text-muted-foreground mb-8">
-            Rejoignez les entreprises et indépendants qui gagnent du temps avec ContracTify
+            Rejoignez les entreprises et indépendants qui gagnent du temps avec Cachetify
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/signup">
