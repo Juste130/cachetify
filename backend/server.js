@@ -22,7 +22,6 @@ const escrowRoutes = require('./routes/escrow');
 const incidentRoutes = require('./routes/incident');
 const notificationRoutes = require('./routes/notifications');
 const analyticsRoutes = require('./routes/analytics');
-const nftRoutes = require('./routes/nft');
 const kycRoutes = require('./routes/kyc');
 
 const app = express();
@@ -77,8 +76,6 @@ app.use('/api/contracts', escrowRoutes);
 app.use('/api/contracts', incidentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/analytics', analyticsRoutes);
-// Public, unauthenticated on purpose — see routes/nft.js.
-app.use('/api/nft', nftRoutes);
 app.use('/api/kyc', kycRoutes);
 
 // NOTE: le job horaire de réconciliation des wallets a été retiré — avec Privy, le

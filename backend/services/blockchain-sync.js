@@ -9,10 +9,9 @@ const { buildContractTitle } = require('../utils/contract-naming');
 
 const CONTRACT_MANAGER_ABI = [
     'function getUserContracts(address user) external view returns (uint256[])',
-    'function getContractDetails(uint256 contractId) external view returns (tuple(uint256 id, address creator, uint40 createdAt, uint40 expiresAt, uint40 effectiveDate, uint8 status, bool allowTermination, bool allowDispute, tuple(uint8 reason, string customReason, string proofIpfsHash, tuple(string justification, uint40 timestamp, address updatedBy) justification) terminationInfo, tuple(uint8 reason, string customReason, string proofIpfsHash, tuple(string justification, uint40 timestamp, address updatedBy) justification) disputeInfo, uint88 escrowAmount, uint8 penaltyPercent, string sha256Hash, uint88 releasedAmount, uint256 nftTokenId, bool isEscrowDeposited, address escrowPayer) contractData, tuple(address signer, uint8 role, string customRole, bool hasSignedContract, uint40 signedAt)[] signers, bool allSigned, uint256 justificationCount, uint256 paymentCount)',
+    'function getContractDetails(uint256 contractId) external view returns (tuple(uint256 id, address creator, uint40 createdAt, uint40 expiresAt, uint40 effectiveDate, uint8 status, string sha256Hash) contractData, tuple(address signer, uint8 role, string customRole, bool hasSignedContract, uint40 signedAt)[] signers, bool allSigned)',
     'event ContractCreated(uint256 indexed contractId, address indexed creator, uint40 createdAt, address[] additionalSigners)',
-    'event ContractFinalized(uint256 indexed contractId, uint256 nftTokenId, uint40 effectiveDate)',
-    'event ContractStatusUpdated(uint256 indexed contractId, uint8 oldStatus, uint8 newStatus, string justification, address updatedBy)',
+    'event ContractFinalized(uint256 indexed contractId, uint40 effectiveDate)',
     'function getTotalContracts() external view returns (uint256)',
 ];
 
@@ -100,52 +99,14 @@ class BlockchainSyncService {
                 };
             }));
 
-            // terminationInfo/disputeInfo were returned by getContractDetails all along but
-            // never captured here — even though the app doesn't drive termination/dispute
-            // exclusively through this sync path, a status change reaching Terminated (or
-            // Disputed, if ever triggered by a direct chain interaction outside the app)
-            // must still be explainable in the UI instead of showing a bare status badge.
-            const terminationInfo = contractData.terminationInfo && Number(contractData.terminationInfo.reason) > 0
-                ? {
-                    reason: Number(contractData.terminationInfo.reason),
-                    customReason: contractData.terminationInfo.customReason,
-                    proofIpfsHash: contractData.terminationInfo.proofIpfsHash,
-                    justification: contractData.terminationInfo.justification?.justification || null,
-                    justifiedAt: Number(contractData.terminationInfo.justification?.timestamp || 0),
-                    justifiedBy: contractData.terminationInfo.justification?.updatedBy || null,
-                }
-                : null;
-            const disputeInfo = contractData.disputeInfo && Number(contractData.disputeInfo.reason) > 0
-                ? {
-                    reason: Number(contractData.disputeInfo.reason),
-                    customReason: contractData.disputeInfo.customReason,
-                    proofIpfsHash: contractData.disputeInfo.proofIpfsHash,
-                    justification: contractData.disputeInfo.justification?.justification || null,
-                    justifiedAt: Number(contractData.disputeInfo.justification?.timestamp || 0),
-                    justifiedBy: contractData.disputeInfo.justification?.updatedBy || null,
-                }
-                : null;
-
             const metadata = {
                 creator: contractData.creator,
                 createdAt: Number(contractData.createdAt),
                 expiresAt: Number(contractData.expiresAt),
                 effectiveDate: Number(contractData.effectiveDate),
-                allowTermination: contractData.allowTermination,
-                allowDispute: contractData.allowDispute,
-                terminationInfo,
-                disputeInfo,
-                escrowAmount: contractData.escrowAmount.toString(),
-                penaltyPercent: Number(contractData.penaltyPercent),
                 sha256Hash: contractData.sha256Hash,
-                releasedAmount: contractData.releasedAmount.toString(),
-                nftTokenId: contractData.nftTokenId.toString(),
-                isEscrowDeposited: contractData.isEscrowDeposited,
-                escrowPayer: contractData.escrowPayer,
                 signers: enrichedSigners,
                 allSigned: details.allSigned,
-                justificationCount: Number(details.justificationCount),
-                paymentCount: Number(details.paymentCount),
             };
 
             let finalUserId = userId;
@@ -274,8 +235,8 @@ class BlockchainSyncService {
             );
             for (const event of finalizedEvents) {
                 try {
-                    const [contractId, nftTokenId] = event.args;
-                    logger.info(`Contract finalized: ${contractId}, NFT: ${nftTokenId}`);
+                    const [contractId] = event.args;
+                    logger.info(`Contract finalized: ${contractId}`);
 
                     // First sync contract details to keep cache accurate
                     await this.syncContract(contractId.toString(), null);
@@ -323,81 +284,6 @@ class BlockchainSyncService {
                 }
             }
 
-            // ContractStatusUpdated
-            const statusEvents = await this.contractManager.queryFilter(
-                this.contractManager.filters.ContractStatusUpdated(),
-                fromBlock, toBlock
-            );
-            for (const event of statusEvents) {
-                try {
-                    const [contractId, , newStatus] = event.args;
-                    logger.info(`Contract ${contractId} status updated to: ${newStatus}`);
-
-                    // First sync contract details to keep cache accurate
-                    await this.syncContract(contractId.toString(), null);
-
-                    const contract = await prisma.contractCache.findUnique({
-                        where: { contractId: Number(contractId) }
-                    });
-
-                    if (contract && contract.metadata && contract.metadata.signers) {
-                        const statusString = contract.status;
-                        const emailService = require('./email');
-                        for (const signer of contract.metadata.signers) {
-                            if (signer.email) {
-                                emailService.sendContractStatusNotification(
-                                    signer.email,
-                                    contract.title,
-                                    contractId.toString(),
-                                    statusString
-                                ).catch(err => logger.error(`[Email] Failed to send status notification to ${signer.email}:`, err));
-                            }
-                        }
-
-                        // Every status change also gets an in-app notification, not just an
-                        // email — a party affected by a termination/cancellation/dispute could
-                        // otherwise miss it entirely if they don't check their inbox. ACTIVE is
-                        // skipped here since ContractFinalized (handled above) already covers it —
-                        // both events fire together when the last signature lands, and this loop
-                        // runs for every ContractStatusUpdated event regardless of which status.
-                        if (statusString !== 'ACTIVE') {
-                            const reasonText = statusString === 'TERMINATED'
-                                ? (contract.metadata.terminationInfo?.customReason || contract.metadata.terminationInfo?.justification || null)
-                                : statusString === 'DISPUTED'
-                                    ? (contract.metadata.disputeInfo?.customReason || contract.metadata.disputeInfo?.justification || null)
-                                    : null;
-                            const titles = {
-                                TERMINATED: 'Contrat résilié',
-                                CANCELLED: 'Contrat annulé',
-                                DISPUTED: 'Litige ouvert sur le contrat',
-                            };
-                            const title = titles[statusString] || 'Statut du contrat mis à jour';
-                            const baseMessage = titles[statusString]
-                                ? `Le contrat "${contract.title}" est maintenant ${statusString === 'TERMINATED' ? 'résilié' : statusString === 'CANCELLED' ? 'annulé' : 'en litige'}.`
-                                : `Le contrat "${contract.title}" a changé de statut : ${statusString}.`;
-                            const message = reasonText ? `${baseMessage} ${reasonText}` : baseMessage;
-
-                            for (const signer of contract.metadata.signers) {
-                                if (!signer.email) continue;
-                                try {
-                                    const notifyUser = await prisma.user.findUnique({ where: { email: signer.email } });
-                                    if (!notifyUser) continue;
-                                    await notificationService.create(notifyUser.id, {
-                                        type: statusString === 'TERMINATED' ? 'CONTRACT_TERMINATED' : 'GENERIC',
-                                        title,
-                                        message,
-                                        contractCacheId: contract.id,
-                                    });
-                                } catch (err) {
-                                    logger.error(`[Notification] Failed to notify ${signer.email} of status change:`, err);
-                                }
-                            }
-                        }
-                    }
-                } catch (err) {
-                    logger.error(`Error processing ContractStatusUpdated for tx ${event.transactionHash}:`, err);
-                }
-            }
         };
 
         const withTimeout = (promise, ms, label) => {
@@ -513,14 +399,8 @@ class BlockchainSyncService {
 
     mapContractStatus(blockchainStatus) {
         const statusMap = {
-            0: ContractStatus.DRAFT,
-            1: ContractStatus.PENDING_SIGNATURES,
-            2: ContractStatus.ACTIVE,
-            3: ContractStatus.COMPLETED,
-            4: ContractStatus.CANCELLED,
-            5: ContractStatus.DISPUTED,
-            6: ContractStatus.TERMINATED,
-            7: ContractStatus.RESIGNED,
+            0: ContractStatus.PENDING_SIGNATURES,
+            1: ContractStatus.ACTIVE,
         };
 
         return statusMap[blockchainStatus] || ContractStatus.DRAFT;

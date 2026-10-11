@@ -35,7 +35,6 @@ const config = {
     polygonRpcUrl: process.env.ALCHEMY_POLYGON_TESTNET_RPC_URL || process.env.POLYGON_RPC_URL,
     polygonTestnetRpcUrl: process.env.ALCHEMY_POLYGON_TESTNET_RPC_URL || process.env.POLYGON_TESTNET_RPC_URL,
     contractManagerAddress: process.env.CONTRACT_MANAGER_ADDRESS,
-    contractNftAddress: process.env.CONTRACT_NFT_ADDRESS,
     adminWalletAddress: process.env.ADMIN_WALLET_ADDRESS,
     // Note: INITIAL_GAS_AMOUNT no longer used - amounts are now dynamic per action
 
@@ -49,15 +48,13 @@ const config = {
     paymentsEnabled: process.env.PAYMENTS_ENABLED === 'true',
     escrowSchedulerIntervalMs: parseInt(process.env.ESCROW_SCHEDULER_INTERVAL_MS || String(15 * 60 * 1000), 10),
 
-    // Fonctionnalités hors périmètre du mémoire de licence (séquestre, vérification
-    // d'identité, certificat NFT) : masquées par défaut (routes ET interface), code et tests
-    // conservés intacts. Repasser une valeur à 'true' pour la réactiver, par exemple une fois
-    // un partenaire de paiement ou d'identité disponible — voir requireFeature() dans
-    // middleware/feature-flag.js pour la façon dont ces drapeaux gardent les routes.
+    // Séquestre hors périmètre du mémoire de licence : masqué par défaut (routes ET
+    // interface), code et tests conservés intacts. Repasser à 'true' pour le réactiver, par
+    // exemple une fois un partenaire de paiement disponible — voir requireFeature() dans
+    // middleware/feature-flag.js pour la façon dont ce drapeau garde les routes.
     features: {
         escrow: process.env.FEATURE_ESCROW === 'true',
         kyc: process.env.FEATURE_KYC === 'true',
-        nft: process.env.FEATURE_NFT === 'true',
     },
 
     // Identity verification (KYC) — Smile ID, chosen for confirmed coverage of all four
