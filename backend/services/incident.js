@@ -5,13 +5,10 @@ const emailService = require('./email');
 const { BadRequestError, ConflictError, NotFoundError, ForbiddenError } = require('../utils/errors');
 
 /**
- * Litiges et pauses hors-chaîne. openDispute()/Disputed on-chain n'a aucune sortie tant
- * que l'escrow crypto n'est pas déposé (voir applyPenalty dans ContractManager.sol) — or
- * il ne l'est plus jamais depuis le passage à l'escrow fiat. Ce service remplace donc
- * entièrement le flux on-chain de litige pour l'usage réel de la plateforme ; l'ancrage
- * on-chain (preuve d'horodatage infalsifiable) se fait via addJustification, appelée
- * directement par le wallet du déclarant côté frontend — ce service n'a pas besoin de
- * connaître ce détail, il reçoit juste onchainTxHash en option pour le journaliser.
+ * Litiges et pauses entièrement hors-chaîne — ContractManager.sol n'a aucun mécanisme de
+ * litige (hors périmètre du mémoire). `onchainTxHash` reste un champ optionnel côté schéma
+ * pour compatibilité avec d'anciens incidents déjà journalisés, mais n'est plus jamais
+ * renseigné par le frontend.
  */
 class IncidentService {
     /** DISPUTE : prend effet immédiatement, pas besoin de l'accord de l'autre partie. */

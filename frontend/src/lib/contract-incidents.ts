@@ -1,11 +1,7 @@
 /**
- * Labels for the off-chain incident system (disputes/holds) — see backend/services/incident.js
- * for why this replaces openDispute()/Disputed on-chain entirely instead of trying to fix
- * its dead end (no exit once escrow crypto isn't deposited, which is now always the case).
- *
- * IncidentReason mirrors ContractManager.sol's DisputeReason enum by name (not by numeric
- * value — this system never calls openDispute, so there's no encoding to keep in sync),
- * plus MUTUAL_TIMEOUT for holds, which has no on-chain equivalent.
+ * Labels for the off-chain incident system (disputes/holds) — entirely off-chain, see
+ * backend/services/incident.js. ContractManager.sol has no dispute mechanism at all (hors
+ * périmètre du mémoire).
  */
 export type IncidentType = "DISPUTE" | "HOLD";
 
@@ -47,19 +43,3 @@ export const INCIDENT_STATUS_LABELS: Record<IncidentStatus, string> = {
   RESOLVED: "Résolu",
   WITHDRAWN: "Retiré",
 };
-
-/**
- * Labels for ContractManager.sol's on-chain TerminationReason enum — used when actually
- * terminating a contract (terminateContract), which unlike disputes has no dead end.
- * Order matches the Solidity enum exactly: index 0 (None) is never sent by the UI.
- */
-export const TERMINATION_REASON_LABELS: string[] = [
-  "Aucune",
-  "Accord mutuel",
-  "Rupture de contrat",
-  "Exécution complète des termes",
-  "Fraude ou fausse déclaration",
-  "Impossibilité d'exécution",
-  "Changement de législation",
-  "Autre",
-];

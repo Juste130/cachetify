@@ -4,16 +4,14 @@ import "@nomicfoundation/hardhat-chai-matchers";
 
 const { ethers } = hre;
 
-describe("Système de Gestion de Contrats NFT", function () {
+describe("ContractManager", function () {
   let contractManager: any;
-  let contractNFT: any;
   let owner: any;
   let creator: any;
   let signer1: any;
   let signer2: any;
   let nonParticipant: any;
 
-  // Durées pour les tests
   const ONE_DAY = 24 * 60 * 60;
   const expiresAt = Math.floor(Date.now() / 1000) + ONE_DAY;
 
@@ -21,31 +19,19 @@ describe("Système de Gestion de Contrats NFT", function () {
     const signers = await ethers.getSigners();
     [owner, creator, signer1, signer2, nonParticipant] = signers;
 
-    const ContractNFT = await ethers.getContractFactory("ContractNFT");
-    contractNFT = await ContractNFT.deploy("http://localhost:5000/api/nft/");
-    await contractNFT.waitForDeployment();
-
-    const nftAddress = await contractNFT.getAddress();
     const ContractManager = await ethers.getContractFactory("ContractManager");
-    contractManager = await ContractManager.deploy(nftAddress);
+    contractManager = await ContractManager.deploy();
     await contractManager.waitForDeployment();
-
-    const managerAddress = await contractManager.getAddress();
-    const transferTx = await contractNFT.transferOwnership(managerAddress);
-    await transferTx.wait();
   });
 
   describe("Déploiement", function () {
-    it("Devrait déployer les contrats avec les bonnes adresses", async function () {
-      const nftAddress = await contractNFT.getAddress();
+    it("Devrait déployer le contrat avec le déployeur comme owner et emergencyAdmin", async function () {
       const managerAddress = await contractManager.getAddress();
-
-      expect(nftAddress).to.be.a("string").and.match(/^0x[a-fA-F0-9]{40}$/);
       expect(managerAddress).to.be.a("string").and.match(/^0x[a-fA-F0-9]{40}$/);
 
-      // Vérifier l'ownership
-      const nftOwner = await contractNFT.owner();
-      expect(nftOwner).to.equal(managerAddress);
+      expect(await contractManager.owner()).to.equal(await owner.getAddress());
+      expect(await contractManager.emergencyAdmin()).to.equal(await owner.getAddress());
+      expect(await contractManager.paused()).to.be.false;
     });
   });
 
@@ -55,84 +41,58 @@ describe("Système de Gestion de Contrats NFT", function () {
       const signer2Address = await signer2.getAddress();
 
       const signersWithRoles = [
-        {
-          signer: signer1Address,
-          role: 1, // CoSigner
-          customRole: "",
-          hasSignedContract: false,
-          signedAt: 0
-        },
-        {
-          signer: signer2Address,
-          role: 2, // Witness
-          customRole: "",
-          hasSignedContract: false,
-          signedAt: 0
-        }
+        { signer: signer1Address, role: 1, customRole: "", hasSignedContract: false, signedAt: 0 },
+        { signer: signer2Address, role: 2, customRole: "", hasSignedContract: false, signedAt: 0 },
       ];
 
       const tx = await contractManager.connect(creator).createContract(
         "QmTestHash123",
         "sha256TestHash123",
         signersWithRoles,
-        expiresAt,
-        true, // allowTermination
-        true, // allowDispute
-        ethers.parseEther("1.0"),
-        10, // penaltyPercent
-        "Création du contrat de développement"
+        expiresAt
       );
 
       const receipt = await tx.wait();
-
-      // Vérifier l'événement
       expect(receipt?.logs.length).to.be.greaterThan(0);
 
-      // Vérifier les détails du contrat
       const contractDetails = await contractManager.getContractDetails(1);
       expect(contractDetails[0].creator.toLowerCase()).to.equal((await creator.getAddress()).toLowerCase());
-      expect(contractDetails[0].status).to.equal(1); // PendingSignatures
-      expect(contractDetails[2]).to.be.false; // allSigned (troisième élément du tuple)
+      expect(contractDetails[0].status).to.equal(0); // PendingSignatures
+      expect(contractDetails[2]).to.be.false; // allSigned
     });
 
-    it("Devrait échouer avec un hash IPFS déjà utilisé", async function () {
-      const signer1Address = await signer1.getAddress();
+    it("Devrait finaliser immédiatement un contrat sans signataire additionnel", async function () {
+      await contractManager.connect(creator).createContract(
+        "QmSoloHash",
+        "sha256SoloHash",
+        [],
+        expiresAt
+      );
 
+      const contractDetails = await contractManager.getContractDetails(1);
+      expect(contractDetails[0].status).to.equal(1); // Active
+      expect(contractDetails[2]).to.be.true; // allSigned
+    });
+
+    it("Devrait échouer avec une référence de stockage déjà utilisée", async function () {
+      const signer1Address = await signer1.getAddress();
       const signersWithRoles = [
-        {
-          signer: signer1Address,
-          role: 1,
-          customRole: "",
-          hasSignedContract: false,
-          signedAt: 0
-        }
+        { signer: signer1Address, role: 1, customRole: "", hasSignedContract: false, signedAt: 0 },
       ];
 
-      // Premier contrat
       await contractManager.connect(creator).createContract(
         "QmDuplicateHash",
         "sha256DuplicateHash1",
         signersWithRoles,
-        expiresAt,
-        true,
-        true,
-        ethers.parseEther("1.0"),
-        10,
-        "Premier contrat"
+        expiresAt
       );
 
-      // Deuxième contrat avec le même hash - devrait échouer
       await expect(
         contractManager.connect(creator).createContract(
           "QmDuplicateHash",
           "sha256DuplicateHash2",
           signersWithRoles,
-          expiresAt,
-          true,
-          true,
-          ethers.parseEther("2.0"),
-          10,
-          "Deuxième contrat"
+          expiresAt
         )
       ).to.be.revertedWith("IPFS hash already used");
     });
@@ -140,15 +100,8 @@ describe("Système de Gestion de Contrats NFT", function () {
     it("Devrait échouer avec une date d'expiration invalide", async function () {
       const pastDate = Math.floor(Date.now() / 1000) - ONE_DAY;
       const signer1Address = await signer1.getAddress();
-
       const signersWithRoles = [
-        {
-          signer: signer1Address,
-          role: 1,
-          customRole: "",
-          hasSignedContract: false,
-          signedAt: 0
-        }
+        { signer: signer1Address, role: 1, customRole: "", hasSignedContract: false, signedAt: 0 },
       ];
 
       await expect(
@@ -156,64 +109,54 @@ describe("Système de Gestion de Contrats NFT", function () {
           "QmTestHash",
           "sha256TestHash",
           signersWithRoles,
-          pastDate,
-          true,
-          true,
-          ethers.parseEther("1.0"),
-          10,
-          "Contrat avec date passée"
+          pastDate
         )
       ).to.be.revertedWith("Invalid expiration time");
+    });
+
+    it("Devrait échouer si le créateur figure aussi parmi les signataires additionnels", async function () {
+      const creatorAddress = await creator.getAddress();
+      const signersWithRoles = [
+        { signer: creatorAddress, role: 1, customRole: "", hasSignedContract: false, signedAt: 0 },
+      ];
+
+      await expect(
+        contractManager.connect(creator).createContract(
+          "QmSelfSign",
+          "sha256SelfSign",
+          signersWithRoles,
+          expiresAt
+        )
+      ).to.be.revertedWith("Creator cannot be additional signer");
     });
   });
 
   describe("Processus de Signature", function () {
     beforeEach(async function () {
-      // Créer un contrat pour les tests de signature
       const signer1Address = await signer1.getAddress();
       const signer2Address = await signer2.getAddress();
 
       const signersWithRoles = [
-        {
-          signer: signer1Address,
-          role: 1,
-          customRole: "",
-          hasSignedContract: false,
-          signedAt: 0
-        },
-        {
-          signer: signer2Address,
-          role: 2,
-          customRole: "",
-          hasSignedContract: false,
-          signedAt: 0
-        }
+        { signer: signer1Address, role: 1, customRole: "", hasSignedContract: false, signedAt: 0 },
+        { signer: signer2Address, role: 2, customRole: "", hasSignedContract: false, signedAt: 0 },
       ];
 
       await contractManager.connect(creator).createContract(
         "QmSignatureTest",
         "sha256SignatureTest",
         signersWithRoles,
-        expiresAt,
-        true,
-        true,
-        ethers.parseEther("1.0"),
-        10,
-        "Test de signatures"
+        expiresAt
       );
     });
 
-    it("Devrait permettre la signature des participants", async function () {
-      // Signer1 signe
+    it("Devrait permettre la signature des participants et finaliser le contrat", async function () {
       await contractManager.connect(signer1).signContract(1);
-
-      // Signer2 signe
       await contractManager.connect(signer2).signContract(1);
 
-      // Vérifier que toutes les signatures sont collectées
       const contractDetails = await contractManager.getContractDetails(1);
-      expect(contractDetails[2]).to.be.true; // allSigned (troisième élément)
-      expect(contractDetails[0].status).to.equal(2); // Active
+      expect(contractDetails[2]).to.be.true; // allSigned
+      expect(contractDetails[0].status).to.equal(1); // Active
+      expect(contractDetails[0].effectiveDate).to.be.greaterThan(0);
     });
 
     it("Devrait échouer si un non-participant tente de signer", async function () {
@@ -222,214 +165,36 @@ describe("Système de Gestion de Contrats NFT", function () {
       ).to.be.revertedWith("Not a participant");
     });
 
-    it("Devrait mint un NFT après toutes les signatures", async function () {
-      // Toutes les signatures
+    it("Devrait échouer si le participant a déjà signé", async function () {
       await contractManager.connect(signer1).signContract(1);
-      await contractManager.connect(signer2).signContract(1);
-
-      // Vérifier que le NFT est minté
-      const contractDetails = await contractManager.getContractDetails(1);
-      expect(contractDetails[0].nftTokenId).to.be.greaterThan(0);
-      expect(contractDetails[0].status).to.equal(2); // Active
-
-      // Vérifier les détails du NFT
-      const nftProof = await contractManager.getNFTProof(1);
-      expect(nftProof[0]).to.equal("QmSignatureTest");
-      expect(nftProof[3].length).to.equal(3); // Creator + Signer1 + Signer2
-    });
-  });
-
-  describe("Gestion des Paiements", function () {
-    beforeEach(async function () {
-      // Créer un contrat actif
-      const signer1Address = await signer1.getAddress();
-
-      const signersWithRoles = [
-        {
-          signer: signer1Address,
-          role: 1,
-          customRole: "",
-          hasSignedContract: false,
-          signedAt: 0
-        }
-      ];
-
-      await contractManager.connect(creator).createContract(
-        "QmPaymentTest",
-        "sha256PaymentTest",
-        signersWithRoles,
-        expiresAt,
-        true,
-        true,
-        ethers.parseEther("2.0"),
-        10,
-        "Test paiements"
-      );
-
-      // Finaliser le contrat
-      await contractManager.connect(signer1).signContract(1);
-    });
-
-    it("Devrait ajouter un paiement", async function () {
-      const tx = await contractManager.connect(creator).addPayment(
-        1,
-        ethers.parseEther("0.5"),
-        "USDC",
-        "QmPaymentProof1"
-      );
-
-      const receipt = await tx.wait();
-
-      expect(receipt?.status).to.equal(1);
-
-      const payments = await contractManager.getContractPayments(1);
-      expect(payments.length).to.equal(1);
-      expect(payments[0].amount).to.equal(ethers.parseEther("0.5"));
-      expect(payments[0].currency).to.equal("USDC");
-    });
-
-    it("Devrait mettre à jour le statut de paiement", async function () {
-      // Ajouter un paiement
-      await contractManager.connect(creator).addPayment(
-        1,
-        ethers.parseEther("1.0"),
-        "MATIC",
-        "QmPaymentProof2"
-      );
-
-      // Mettre à jour le statut
-      const tx = await contractManager.connect(creator).updatePaymentStatus(
-        1,
-        0, // premier paiement
-        3, // Completed
-        "Paiement reçu avec succès"
-      );
-
-      const receipt = await tx.wait();
-      expect(receipt?.status).to.equal(1);
-
-      // Vérifier le montant libéré
-      const contractDetails = await contractManager.getContractDetails(1);
-      expect(contractDetails[0].releasedAmount).to.equal(ethers.parseEther("1.0"));
-    });
-  });
-
-  describe("Résiliation et Litiges", function () {
-    beforeEach(async function () {
-      // Créer un contrat actif
-      const signer1Address = await signer1.getAddress();
-
-      const signersWithRoles = [
-        {
-          signer: signer1Address,
-          role: 1,
-          customRole: "",
-          hasSignedContract: false,
-          signedAt: 0
-        }
-      ];
-
-      await contractManager.connect(creator).createContract(
-        "QmDisputeTest",
-        "sha256DisputeTest",
-        signersWithRoles,
-        expiresAt,
-        true, // allowTermination
-        true, // allowDispute
-        ethers.parseEther("1.0"),
-        10,
-        "Test résiliation"
-      );
-
-      await contractManager.connect(signer1).signContract(1);
-    });
-
-    it("Devrait permettre la résiliation", async function () {
-      const tx = await contractManager.connect(creator).terminateContract(
-        1,
-        1, // MutualAgreement
-        "Parties en accord",
-        "QmTerminationProof",
-        "Résiliation à l'amiable"
-      );
-
-      const receipt = await tx.wait();
-      expect(receipt?.status).to.equal(1);
-
-      const contractDetails = await contractManager.getContractDetails(1);
-      expect(contractDetails[0].status).to.equal(6); // Terminated
-    });
-
-    it("Devrait permettre l'ouverture d'un litige", async function () {
-      const tx = await contractManager.connect(signer1).openDispute(
-        1,
-        2, // PoorQualityWork
-        "Travail de mauvaise qualité",
-        "QmDisputeProof",
-        "Client insatisfait du travail fourni"
-      );
-
-      const receipt = await tx.wait();
-      expect(receipt?.status).to.equal(1);
-
-      const contractDetails = await contractManager.getContractDetails(1);
-      expect(contractDetails[0].status).to.equal(5); // Disputed
-    });
-
-    it("Devrait échouer la résiliation si non autorisée", async function () {
-      // Créer un contrat sans résiliation autorisée
-      await contractManager.connect(creator).createContract(
-        "QmNoTermination",
-        "sha256NoTermination",
-        [],
-        expiresAt,
-        false, // allowTermination = false
-        true,
-        ethers.parseEther("1.0"),
-        10,
-        "Contrat sans résiliation"
-      );
 
       await expect(
-        contractManager.connect(creator).terminateContract(
-          2,
-          1,
-          "Raison",
-          "Proof",
-          "Justification"
-        )
-      ).to.be.revertedWith("Termination not allowed");
+        contractManager.connect(signer1).signContract(1)
+      ).to.be.revertedWith("Already signed");
     });
   });
 
   describe("Système de Pause", function () {
     it("Devrait permettre la pause par le owner", async function () {
-      const tx = await contractManager.connect(owner).emergencyPause(
-        "Maintenance système"
-      );
-
+      const tx = await contractManager.connect(owner).emergencyPause("Maintenance système");
       const receipt = await tx.wait();
       expect(receipt?.status).to.equal(1);
 
-      const isPaused = await contractManager.paused();
-      expect(isPaused).to.be.true;
+      expect(await contractManager.paused()).to.be.true;
+    });
+
+    it("Devrait empêcher une adresse non autorisée de déclencher la pause", async function () {
+      await expect(
+        contractManager.connect(nonParticipant).emergencyPause("Tentative non autorisée")
+      ).to.be.revertedWith("Not authorized to pause");
     });
 
     it("Devrait empêcher les actions quand en pause", async function () {
-      // Mettre en pause
       await contractManager.connect(owner).emergencyPause("Test pause");
 
-      // Tenter de créer un contrat - devrait échouer
       const signer1Address = await signer1.getAddress();
-
       const signersWithRoles = [
-        {
-          signer: signer1Address,
-          role: 1,
-          customRole: "",
-          hasSignedContract: false,
-          signedAt: 0
-        }
+        { signer: signer1Address, role: 1, customRole: "", hasSignedContract: false, signedAt: 0 },
       ];
 
       await expect(
@@ -437,231 +202,43 @@ describe("Système de Gestion de Contrats NFT", function () {
           "QmPausedTest",
           "sha256PausedTest",
           signersWithRoles,
-          expiresAt,
-          true,
-          true,
-          ethers.parseEther("1.0"),
-          10,
-          "Test pendant pause"
+          expiresAt
         )
       ).to.be.revertedWith("Contract is paused");
     });
 
-    it("Devrait permettre la reprise", async function () {
-      // Mettre en pause
+    it("Devrait permettre la reprise après le délai minimal", async function () {
       await contractManager.connect(owner).emergencyPause("Test reprise");
+      await hre.network.provider.send("evm_increaseTime", [60 * 60 + 1]);
+      await hre.network.provider.send("evm_mine");
 
-      // Reprendre
       const tx = await contractManager.connect(owner).resumeContract("Maintenance terminée");
-
       const receipt = await tx.wait();
       expect(receipt?.status).to.equal(1);
 
-      const isPaused = await contractManager.paused();
-      expect(isPaused).to.be.false;
+      expect(await contractManager.paused()).to.be.false;
+    });
+
+    it("Devrait empêcher la reprise avant le délai minimal (sauf emergencyAdmin)", async function () {
+      // Le déployeur est owner ET emergencyAdmin par défaut, ce qui contournerait le délai
+      // dans les deux cas — on désigne un emergencyAdmin distinct pour isoler le cas "owner
+      // non-emergencyAdmin", le seul réellement bloqué par le délai minimal.
+      await contractManager.connect(owner).setEmergencyAdmin(await signer2.getAddress());
+      await contractManager.connect(owner).emergencyPause("Test délai");
+
+      await expect(
+        contractManager.connect(owner).resumeContract("Trop tôt")
+      ).to.be.revertedWith("Minimum pause duration not reached (1 hour)");
+    });
+
+    it("Devrait permettre la reprise forcée après la durée maximale", async function () {
+      await contractManager.connect(owner).emergencyPause("Pause longue");
+      await hre.network.provider.send("evm_increaseTime", [30 * 24 * 60 * 60 + 1]);
+      await hre.network.provider.send("evm_mine");
+
+      await contractManager.connect(nonParticipant).forceResume();
+
+      expect(await contractManager.paused()).to.be.false;
     });
   });
-
-  describe("Gestion des Justifications", function () {
-    beforeEach(async function () {
-      // Créer un contrat
-      const signer1Address = await signer1.getAddress();
-
-      const signersWithRoles = [
-        {
-          signer: signer1Address,
-          role: 1,
-          customRole: "",
-          hasSignedContract: false,
-          signedAt: 0
-        }
-      ];
-
-      await contractManager.connect(creator).createContract(
-        "QmJustificationTest",
-        "sha256JustificationTest",
-        signersWithRoles,
-        expiresAt,
-        true,
-        true,
-        ethers.parseEther("1.0"),
-        10,
-        "Test justifications"
-      );
-    });
-
-    it("Devrait ajouter une justification", async function () {
-      const tx = await contractManager.connect(creator).addJustification(
-        1,
-        "Nouvelle justification"
-      );
-
-      const receipt = await tx.wait();
-      expect(receipt?.status).to.equal(1);
-
-      const justifications = await contractManager.getContractJustifications(1);
-      expect(justifications.length).to.equal(2); // 1 initiale + 1 ajoutée
-    });
-  });
-
-  describe("Escrow", function () {
-    let contractId: number;
-
-    beforeEach(async function () {
-      const signer1Address = await signer1.getAddress();
-
-      const signersWithRoles = [
-        {
-          signer: signer1Address,
-          role: 1,
-          customRole: "",
-          hasSignedContract: false,
-          signedAt: 0
-        }
-      ];
-
-      await contractManager.connect(creator).createContract(
-        "QmEscrowTest",
-        "sha256EscrowTest",
-        signersWithRoles,
-        expiresAt,
-        true, // allowTermination
-        true, // allowDispute
-        ethers.parseEther("1.0"),
-        10, // penaltyPercent
-        "Test escrow"
-      );
-
-      // Finalise le contrat (passe en Active)
-      await contractManager.connect(signer1).signContract(1);
-      contractId = 1;
-    });
-
-    it("Devrait permettre le dépôt d'escrow par un participant avec le bon montant", async function () {
-      await contractManager.connect(signer1).depositEscrow(contractId, {
-        value: ethers.parseEther("1.0"),
-      });
-
-      const contractDetails = await contractManager.getContractDetails(contractId);
-      expect(contractDetails[0].isEscrowDeposited).to.be.true;
-      expect(contractDetails[0].escrowPayer.toLowerCase()).to.equal((await signer1.getAddress()).toLowerCase());
-    });
-
-    it("Devrait échouer le dépôt d'escrow avec un mauvais montant", async function () {
-      await expect(
-        contractManager.connect(signer1).depositEscrow(contractId, {
-          value: ethers.parseEther("0.5"),
-        })
-      ).to.be.revertedWith("Incorrect escrow amount");
-    });
-
-    it("Devrait échouer le dépôt d'escrow sur un contrat sans montant déclaré", async function () {
-      // Un contrat créé avec escrowAmount = 0 n'a pas de séquestre à déposer. Sans le
-      // require dédié, un dépôt à value: 0 passerait la vérification "Incorrect escrow
-      // amount" (0 == 0) et marquerait isEscrowDeposited à true sans qu'un centime ne
-      // change de mains — assez pour débloquer terminateContract frauduleusement.
-      const signersWithRoles = [
-        {
-          signer: await signer1.getAddress(),
-          role: 1,
-          customRole: "",
-          hasSignedContract: false,
-          signedAt: 0
-        }
-      ];
-
-      await contractManager.connect(creator).createContract(
-        "QmNoEscrowTest",
-        "sha256NoEscrowTest",
-        signersWithRoles,
-        expiresAt,
-        true,
-        true,
-        0, // Pas d'escrow déclaré
-        10,
-        "Test sans escrow"
-      );
-      await contractManager.connect(signer1).signContract(2);
-
-      await expect(
-        contractManager.connect(signer1).depositEscrow(2, { value: 0 })
-      ).to.be.revertedWith("No escrow declared for this contract");
-    });
-
-    it("Devrait permettre à l'escrowPayer de libérer les fonds au créateur", async function () {
-      await contractManager.connect(signer1).depositEscrow(contractId, {
-        value: ethers.parseEther("1.0"),
-      });
-
-      const creatorBalanceBefore = await ethers.provider.getBalance(await creator.getAddress());
-
-      await contractManager.connect(signer1).releaseEscrow(contractId);
-
-      const creatorBalanceAfter = await ethers.provider.getBalance(await creator.getAddress());
-      expect(creatorBalanceAfter - creatorBalanceBefore).to.equal(ethers.parseEther("1.0"));
-
-      const contractDetails = await contractManager.getContractDetails(contractId);
-      expect(contractDetails[0].isEscrowDeposited).to.be.false;
-      expect(contractDetails[0].status).to.equal(3); // Completed
-    });
-
-    it("Devrait échouer si quelqu'un d'autre que l'escrowPayer tente de libérer les fonds", async function () {
-      await contractManager.connect(signer1).depositEscrow(contractId, {
-        value: ethers.parseEther("1.0"),
-      });
-
-      await expect(
-        contractManager.connect(creator).releaseEscrow(contractId)
-      ).to.be.revertedWith("Only the escrow payer can release funds");
-    });
-
-    it("Devrait appliquer la pénalité correctement sur un contrat en litige et clore le contrat", async function () {
-      await contractManager.connect(signer1).depositEscrow(contractId, {
-        value: ethers.parseEther("1.0"),
-      });
-
-      // Ouvrir un litige (participant)
-      await contractManager.connect(signer1).openDispute(
-        contractId,
-        1, // NonPayment
-        "Non paiement",
-        "QmDisputeProof",
-        "Litige pour non-paiement"
-      );
-
-      const creatorBalanceBefore = await ethers.provider.getBalance(await creator.getAddress());
-
-      await contractManager.connect(signer1).applyPenalty(contractId);
-
-      const creatorBalanceAfter = await ethers.provider.getBalance(await creator.getAddress());
-      // 90% du montant (100% - 10% de pénalité) revient au créateur
-      expect(creatorBalanceAfter - creatorBalanceBefore).to.equal(ethers.parseEther("0.9"));
-
-      const contractDetails = await contractManager.getContractDetails(contractId);
-      expect(contractDetails[0].isEscrowDeposited).to.be.false;
-      expect(contractDetails[0].status).to.equal(3); // Completed
-    });
-
-    it("Devrait empêcher la résiliation tant que l'escrow n'est pas soldé", async function () {
-      await contractManager.connect(signer1).depositEscrow(contractId, {
-        value: ethers.parseEther("1.0"),
-      });
-
-      await expect(
-        contractManager.connect(creator).terminateContract(
-          contractId,
-          1,
-          "Raison",
-          "Proof",
-          "Justification"
-        )
-      ).to.be.revertedWith("Release or penalize escrow before terminating");
-    });
-  });
-
-  // Fonction utilitaire pour obtenir le timestamp du bloc actuel
-  async function getBlockTimestamp(): Promise<number> {
-    const block = await ethers.provider.getBlock("latest");
-    return block ? Number(block.timestamp) : Math.floor(Date.now() / 1000);
-  }
 });

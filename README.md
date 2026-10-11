@@ -10,10 +10,9 @@ A **secure, blockchain-based contract management platform** combining smart cont
 ## 🎯 Features
 
 ### Core Features
-- **🔗 Blockchain-Based Contracts** - Smart contracts on Polygon with cryptographic signatures
+- **🔗 Blockchain-Based Contracts** - Smart contract on Polygon anchoring the document hash, storage reference, signer addresses, and each signature's date
 - **🤖 AI Contract Generation** - Automatically generate contracts using Groq (GPT-OSS-120B)
 - **📝 Contract Management** - Create, sign, and track contracts with full audit trail
-- **💎 NFT Proof** - Optional NFT certificate as proof of contract finalization (off by default, `FEATURE_NFT`)
 - **👥 Multi-Signer Support** - Multiple parties can sign contracts sequentially
 - **📄 Encrypted Document Storage** - Contracts are encrypted at rest (AES-256-GCM, one key per document) rather than stored on IPFS/Pinata
 - **🔐 Wallet Management** - Built-in Privy integration with Smart Wallets (ERC-4337) and native gas sponsorship
@@ -188,7 +187,7 @@ Authentication is entirely handled by Privy — there is no email/password or Go
 - `GET /api/contracts/search` - Search contracts
 - `GET /api/contracts/:contractId` - Get contract details
 
-Signing a contract and depositing/releasing escrow happen as direct on-chain transactions from the frontend (via the connected Privy wallet), not through the backend API.
+Creating and signing a contract happen as direct on-chain transactions from the frontend (via the connected Privy wallet), not through the backend API. Escrow (hors périmètre du mémoire, off by default) is simulated entirely off-chain through the backend API instead.
 
 See `backend/routes/` for the full list, including `ai.js`, `ipfs.js`, and `user.js`.
 

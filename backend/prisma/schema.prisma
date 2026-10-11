@@ -231,11 +231,8 @@ model ContractEscrow {
 
 // ==================== CONTRACT INCIDENTS (litiges / pauses, hors-chaîne) ====================
 //
-// openDispute()/Disputed on-chain n'a aucune fonction de sortie tant que l'escrow crypto
-// n'a pas été déposé (voir applyPenalty) — or il ne l'est plus jamais depuis le passage à
-// l'escrow fiat off-chain. Plutôt que d'emprunter ce cul-de-sac, litiges et pauses sont
-// gérés entièrement ici, avec un ancrage on-chain léger (addJustification, déjà existant
-// et fonctionnel) pour la preuve d'horodatage — sans jamais dépendre de l'escrow crypto.
+// ContractManager.sol n'a aucun mécanisme de litige (hors périmètre du mémoire) : litiges et
+// pauses sont gérés entièrement ici, hors-chaîne.
 //
 // DISPUTE : une partie signale un problème, prend effet immédiatement (pas besoin de
 // l'accord de l'autre pour EXISTER, seulement pour être résolu).
@@ -281,7 +278,7 @@ model ContractIncident {
   resolution      String?         @db.Text
   resolvedByUserId String?        @map("resolved_by_user_id")
   resolvedAt      DateTime?       @map("resolved_at")
-  onchainTxHash   String?         @map("onchain_tx_hash") // ancrage addJustification, si signé par le déclarant
+  onchainTxHash   String?         @map("onchain_tx_hash") // champ legacy, plus jamais renseigné (voir note de module ci-dessus)
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
 

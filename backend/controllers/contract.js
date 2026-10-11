@@ -693,10 +693,10 @@ exports.getPublicVerification = async (req, res, next) => {
             createdAt: contract.createdAt,
             contractId: contract.contractId,
             sha256Hash,
-            // Empreinte du certificat officiel (document complet + QR), ancrée séparément
-            // sur la blockchain via addJustification au moment de sa génération — voir
-            // storeCertificate. Servie ici depuis notre base, pas rerelue en direct sur la
-            // chaîne comme sha256Hash ci-dessus (limite connue, voir mémoire chapitre 3).
+            // Empreinte du certificat officiel (document complet + QR) — voir storeCertificate.
+            // Servie ici depuis notre base, jamais écrite sur la blockchain (seule l'empreinte
+            // du document source, sha256Hash ci-dessus, l'est) ni rerelue en direct sur la
+            // chaîne (limite connue, voir mémoire chapitre 3).
             certificateSha256Hash: contract.metadata?.certificateSha256Hash || null,
             isExternalPdf: !!contract.metadata?.isExternalPdf,
             verifiedOnChain,

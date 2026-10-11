@@ -34,7 +34,6 @@ import {
   UserX,
   Gavel,
   PauseCircle,
-  XCircle,
   QrCode,
   Lock,
 } from "lucide-react"
@@ -43,7 +42,6 @@ import { KycSignatureModal } from "@/components/contract/kyc-signature-modal"
 import { SignaturePanel } from "@/components/contract/signaturePanel"
 import { PdfDocumentViewer } from "@/components/contract/pdf-document-viewer"
 import { IdentityVerificationModal } from "@/components/kyc/identity-verification-modal"
-import { NFTViewer } from "@/components/nft/NFTViewer"
 import { AiBadge } from "../ui/ai-badge"
 import { ContractMarkdownRenderer } from "@/components/contract/contract-markdown-renderer"
 import { cn } from "@/components/ui/utils"
@@ -54,7 +52,6 @@ import {
   DISPUTE_REASONS,
   DISPUTE_REASON_LABELS,
   INCIDENT_STATUS_LABELS,
-  TERMINATION_REASON_LABELS,
   type IncidentReason,
 } from "@/lib/contract-incidents"
 
@@ -82,16 +79,13 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [showDisputeForm, setShowDisputeForm] = useState(false)
   const [showHoldForm, setShowHoldForm] = useState(false)
-  const [showTerminateForm, setShowTerminateForm] = useState(false)
   const [disputeReason, setDisputeReason] = useState<IncidentReason>("OTHER")
   const [disputeDescription, setDisputeDescription] = useState("")
   const [holdDescription, setHoldDescription] = useState("")
-  const [terminateReason, setTerminateReason] = useState(1)
-  const [terminateJustification, setTerminateJustification] = useState("")
   const [incidentActionLoading, setIncidentActionLoading] = useState(false)
   const [incidentActionError, setIncidentActionError] = useState<string | null>(null)
   const { account, isConnected } = useWeb3()
-  const { signContract, createContract, terminateContract, anchorJustification, loading: isSigning } = useContract()
+  const { signContract, createContract, loading: isSigning } = useContract()
   const { user } = useAuthStore()
 
   const copyToClipboard = async (field: string, value: string) => {
@@ -167,13 +161,12 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
     }
   }
 
-  // Dépôt et ancrage AUTOMATIQUES du certificat officiel (le PDF avec code QR — voir la
-  // décision de le traiter comme le document définitif) : dès qu'un participant autorisé
-  // ouvre la page d'un contrat entièrement signé, son navigateur génère le certificat, le
-  // dépose (idempotent côté serveur : le premier arrivé gagne, voir storeCertificate) et,
-  // seulement si ce dépôt est vraiment le premier, ancre son empreinte sur la blockchain via
-  // anchorJustification — aucun bouton à cliquer. Best-effort : une erreur ici ne doit
-  // jamais gêner la consultation du contrat, juste rester silencieuse en console.
+  // Dépôt AUTOMATIQUE du certificat officiel (le PDF avec code QR — voir la décision de le
+  // traiter comme le document définitif) : dès qu'un participant autorisé ouvre la page d'un
+  // contrat entièrement signé, son navigateur génère le certificat et le dépose (idempotent
+  // côté serveur : le premier arrivé gagne, voir storeCertificate) — aucun bouton à cliquer.
+  // Best-effort : une erreur ici ne doit jamais gêner la consultation du contrat, juste
+  // rester silencieuse en console.
   useEffect(() => {
     if (!contract) return;
     if (!contract.contractId) return; // pas encore déployé sur la chaîne
@@ -188,11 +181,7 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
         if (cancelled) return;
         // See the matching comment in hash.ts's computeBytesSHA256 — same TS/DOM typing papercut.
         const file = new File([bytes as Uint8Array<ArrayBuffer>], fileName, { type: "application/pdf" });
-        const result = await contractsApi.storeCertificate(String(contract.contractId), file, fileName);
-        if (cancelled) return;
-        if (!result.alreadyExisted) {
-          await anchorJustification(String(contract.contractId), `CERTIFICAT_SHA256:${result.sha256Hash}`);
-        }
+        await contractsApi.storeCertificate(String(contract.contractId), file, fileName);
         if (!cancelled) fetchDetails({ silent: true });
       } catch (err) {
         console.error("Échec du dépôt automatique du certificat officiel :", err);
@@ -382,14 +371,9 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
     setIncidentActionLoading(true)
     setIncidentActionError(null)
     try {
-      // Best-effort on-chain breadcrumb — never blocks the actual dispute if it fails.
-      const onchainTxHash = contract?.contractId
-        ? await anchorJustification(String(contract.contractId), `DISPUTE ${disputeReason}: ${disputeDescription}`.slice(0, 200))
-        : null
       await incidentsApi.raiseDispute(id, {
         reason: disputeReason,
         description: disputeDescription,
-        onchainTxHash: onchainTxHash || undefined,
       })
       setShowDisputeForm(false)
       setDisputeDescription("")
@@ -406,10 +390,7 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
     setIncidentActionLoading(true)
     setIncidentActionError(null)
     try {
-      const onchainTxHash = contract?.contractId
-        ? await anchorJustification(String(contract.contractId), `HOLD proposed: ${holdDescription}`.slice(0, 200))
-        : null
-      await incidentsApi.proposeHold(id, { description: holdDescription, onchainTxHash: onchainTxHash || undefined })
+      await incidentsApi.proposeHold(id, { description: holdDescription })
       setShowHoldForm(false)
       setHoldDescription("")
       await fetchIncidents()
@@ -441,22 +422,6 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
       await fetchIncidents()
     } catch (err: any) {
       setIncidentActionError(err.message || "Impossible de retirer cet incident.")
-    } finally {
-      setIncidentActionLoading(false)
-    }
-  }
-
-  const handleTerminate = async () => {
-    if (!contract?.contractId || !terminateJustification.trim()) return
-    setIncidentActionLoading(true)
-    setIncidentActionError(null)
-    try {
-      await terminateContract(String(contract.contractId), terminateReason, "", "", terminateJustification)
-      setShowTerminateForm(false)
-      setTerminateJustification("")
-      await fetchDetails({ silent: true })
-    } catch (err: any) {
-      setIncidentActionError(err.message || "La résiliation a échoué.")
     } finally {
       setIncidentActionLoading(false)
     }
@@ -595,13 +560,6 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
   const signedCount = signerRows.filter(s => s.hasSigned).length
   const roleLabel = signatoryRoleLabel
 
-  // contractId (this on-chain contract's own id) and nftTokenId (the separate, globally
-  // incrementing ERC-721 token counter in ContractNFT.sol) are two unrelated ID spaces —
-  // using one as a fallback for the other queries a random, likely wrong or non-existent
-  // NFT. "0" (a real string in the synced metadata) means "not minted yet", same as absent.
-  const rawNftTokenId = contract.metadata?.nftTokenId
-  const mintedNftTokenId = rawNftTokenId && rawNftTokenId !== "0" ? rawNftTokenId : null
-
   return (
     <>
       <main className="flex-1 py-8 px-8 transition-all duration-300" style={{ marginLeft: 'var(--sidebar-width, 256px)' }}>
@@ -687,91 +645,8 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
                  Déployer sur la blockchain
                </Button>
               )}
-              {contract.status === 'ACTIVE' && contract.metadata?.allowTermination && (currentUserSigner || isCreator) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-2 text-destructive border-destructive/30 hover:bg-destructive/5"
-                  onClick={() => setShowTerminateForm((v) => !v)}
-                >
-                  <XCircle className="w-4 h-4" />
-                  Résilier
-                </Button>
-              )}
             </div>
           </div>
-
-          {showTerminateForm && (
-            <Card className="p-6 mb-8 border-destructive/30 bg-destructive/5">
-              <h3 className="font-bold flex items-center gap-2 mb-3 text-destructive">
-                <XCircle className="w-5 h-5" />
-                Résilier ce contrat
-              </h3>
-              <p className="text-xs text-muted-foreground mb-4">
-                Action définitive et irréversible, ancrée sur la blockchain. Toutes les parties seront notifiées.
-              </p>
-              <div className="space-y-3">
-                <select
-                  value={terminateReason}
-                  onChange={(e) => setTerminateReason(Number(e.target.value))}
-                  className="w-full p-2 rounded-lg border border-border bg-input-background text-sm"
-                >
-                  {TERMINATION_REASON_LABELS.slice(1).map((label, idx) => (
-                    <option key={idx + 1} value={idx + 1}>{label}</option>
-                  ))}
-                </select>
-                <textarea
-                  value={terminateJustification}
-                  onChange={(e) => setTerminateJustification(e.target.value)}
-                  placeholder="Justification de la résiliation (visible par toutes les parties)..."
-                  className="w-full p-2 rounded-lg border border-border bg-input-background text-sm min-h-[70px]"
-                  maxLength={200}
-                />
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={handleTerminate}
-                    disabled={incidentActionLoading || !terminateJustification.trim()}
-                  >
-                    {incidentActionLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                    Confirmer la résiliation
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setShowTerminateForm(false)}>Annuler</Button>
-                </div>
-                {incidentActionError && (
-                  <p className="text-xs text-destructive flex items-center gap-1.5"><AlertCircle className="w-3.5 h-3.5 shrink-0" />{incidentActionError}</p>
-                )}
-              </div>
-            </Card>
-          )}
-
-          {contract.metadata?.terminationInfo && (
-            <Card className="p-6 mb-8 border-red-500/30 bg-red-500/5">
-              <h3 className="font-bold flex items-center gap-2 mb-2 text-red-600">
-                <XCircle className="w-5 h-5" />
-                Ce contrat a été résilié
-              </h3>
-              <p className="text-sm">
-                <span className="font-medium">{TERMINATION_REASON_LABELS[contract.metadata.terminationInfo.reason] || "Raison non précisée"}</span>
-                {contract.metadata.terminationInfo.customReason && ` — ${contract.metadata.terminationInfo.customReason}`}
-              </p>
-              {contract.metadata.terminationInfo.justification && (
-                <p className="text-sm text-muted-foreground mt-1">{contract.metadata.terminationInfo.justification}</p>
-              )}
-              {contract.metadata.terminationInfo.proofIpfsHash && (
-                // Même raison que le lien "Voir le document" plus bas dans cette page : la
-                // passerelle Pinata publique n'existe plus depuis le chiffrement (A1).
-                <a
-                  href={ipfsApi.getPublicUrl(contract.metadata.terminationInfo.proofIpfsHash)}
-                  target="_blank" rel="noopener noreferrer"
-                  className="text-xs text-primary underline mt-2 inline-block"
-                >
-                  Voir la preuve jointe
-                </a>
-              )}
-            </Card>
-          )}
 
           {FEATURES.escrow && escrow && (
             <Card className="p-6 mb-8 border-[#FFC107]/30 bg-[#FFC107]/5">
@@ -1261,27 +1136,6 @@ export function ContractDetailsPage({ id, created }: ContractDetailsPageProps) {
                       Ce contrat est immuable et ancré sur le réseau Polygon. Chaque signature est une transaction vérifiable.
                     </p>
                     <div className="flex flex-col gap-2">
-                      {/* NFT hors périmètre du mémoire — le mint on-chain automatique à la
-                          finalisation continue (impossible à couper sans redéployer le
-                          contrat), seul cet affichage est masqué. */}
-                      {FEATURES.nft && (
-                        mintedNftTokenId ? (
-                          <NFTViewer
-                            tokenId={mintedNftTokenId}
-                            contractId={String(contract.contractId || contract.id)}
-                            title={contract.title}
-                            effectiveDate={contract.metadata?.effectiveDate ? new Date(contract.metadata.effectiveDate * 1000).toISOString() : undefined}
-                            ipfsUrl={contract.ipfsHash ? ipfsApi.getPublicUrl(contract.ipfsHash) : undefined}
-                            contractStatus={contract.status}
-                          />
-                        ) : (
-                          <p className="text-[11px] text-muted-foreground italic">
-                            {contract.status === 'ACTIVE' || contract.status === 'COMPLETED'
-                              ? "Certificat en cours de synchronisation..."
-                              : "Le certificat sera disponible une fois toutes les signatures collectées."}
-                          </p>
-                        )
-                      )}
                       <Button variant="outline" className="w-full text-xs gap-2" asChild>
                         <a href={ipfsApi.getPublicUrl(contract.ipfsHash || '')} target="_blank" rel="noopener noreferrer">
                           <Download className="w-3 h-3" />
