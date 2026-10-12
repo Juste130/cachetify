@@ -1,0 +1,385 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ==================== USER MANAGEMENT ====================
+
+enum UserRole {
+  ADMIN
+  USER
+  VIEWER
+}
+
+// ==================== IDENTITY VERIFICATION (KYC) ====================
+//
+// One verification per human being, ever — never per contract. Reused across every future
+// contract once VERIFIED, which is the whole point: it upgrades a signature from "simple"
+// (valid, but no legal presumption of authenticity) to one backed by a reliable
+// identification process (the presumption courts actually give weight to), without asking
+// anyone to repeat it. Platform absorbs the cost of the first check per person — see the
+// KYC design notes — so there is deliberately no per-contract billing concept here.
+enum KycStatus {
+  NOT_VERIFIED // Default. Can still create and sign contracts (simple e-signature).
+  PENDING // Submitted to the provider, awaiting its async result (webhook).
+  VERIFIED
+  FAILED // Provider rejected the submission (mismatch, unreadable document...) — can retry.
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String?   @map("password_hash")
+  googleId     String?   @unique @map("google_id")
+  privyId      String?   @unique @map("privy_id")
+  role         UserRole  @default(USER)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  profileData  Json?     @map("profile_data")
+
+  kycStatus      KycStatus @default(NOT_VERIFIED) @map("kyc_status")
+  // "smile_id" today — kept as a string rather than an enum so a future second provider
+  // doesn't need a migration, just a new value.
+  kycProvider    String?   @map("kyc_provider")
+  // The PROVIDER's own job/reference id — never the ID document itself, never the selfie.
+  // Data minimization by construction: there is nothing sensitive in this column to leak.
+  kycReferenceId String?   @map("kyc_reference_id")
+  kycCountry     String?   @map("kyc_country")
+  kycVerifiedAt  DateTime? @map("kyc_verified_at")
+  // Distinct from kycStatus: tracks whether the ONE-TIME post-signup invitation modal has
+  // already been shown, independently of whether the user went through with it or skipped —
+  // without this, "skip" would have no way to stop the modal from reappearing.
+  hasSeenKycPrompt Boolean @default(false) @map("has_seen_kyc_prompt")
+
+  wallet    UserWallet?
+  contracts ContractCache[]
+
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  invitationsSent Invitation[]
+
+  @@map("users")
+}
+
+// ==================== INVITATIONS ====================
+//
+// Lets any authenticated user invite someone who doesn't have a Cachetify account yet,
+// by email — from the dashboard (invite a future counterparty) or from the admin users
+// panel. There's no acceptance workflow to track: Privy handles signup itself, so
+// "accepted" is simply "a User with this email now exists" — this table only exists to
+// throttle repeat invites to the same address and give the inviter a record of who they
+// already invited.
+
+model Invitation {
+  id          String   @id @default(uuid())
+  email       String
+  invitedById String   @map("invited_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  invitedBy User @relation(fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([email])
+  @@index([invitedById])
+  @@map("invitations")
+}
+
+model UserWallet {
+  id                  String    @id @default(uuid())
+  userId              String    @unique @map("user_id")
+  publicAddress       String    @unique @map("public_address") @db.VarChar(42)
+  encryptedPrivateKey String?   @map("encrypted_private_key") @db.Text
+  encryptionIv        String?   @map("encryption_iv") @db.VarChar(32)
+  encryptionAuthTag   String?   @map("encryption_auth_tag") @db.VarChar(32)
+  encryptionSalt      String?   @map("encryption_salt") @db.VarChar(32)
+  isAdminWallet       Boolean   @default(false) @map("is_admin_wallet")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  fundedAt            DateTime? @map("funded_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_wallets")
+}
+
+// ==================== CONTRACT CACHE ====================
+
+enum ContractStatus {
+  DRAFT_WAITING_SIGNERS
+  READY_TO_DEPLOY
+  DRAFT
+  PENDING_SIGNATURES
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  DISPUTED
+  TERMINATED
+  RESIGNED
+}
+
+model ContractCache {
+  id         String         @id @default(uuid())
+  contractId Int?           @unique @map("contract_id") // Optional for drafts
+  userId     String         @map("user_id")
+  title      String
+  // Platform-wide sequential reference (displayed as "CTF-000042" — see
+  // lib/utils/contractNaming.ts / utils/contract-naming.js), assigned atomically by
+  // Postgres the instant the draft row is created. This is the ONLY thing this app relies
+  // on for guaranteed uniqueness between documents — `title` alone can (and regularly does)
+  // collide: same contract type, same signatories, same day produces an identical title.
+  // A Postgres sequence can never hand out the same value twice, even under concurrent
+  // writes, unlike a date/time-based scheme.
+  reference  Int            @unique @default(autoincrement())
+  ipfsHash   String?        @map("ipfs_hash") // Optional until IPFS upload
+  // Jeton non devinable (128 bits, base64url) vers lequel pointe le code QR du certificat —
+  // remplace l'ancien usage de `reference`/`id` en clair sur la page publique de
+  // vérification, énumérables par nature. Nullable pour les lignes créées avant ce champ.
+  publicToken String?       @unique @map("public_token")
+  status     ContractStatus
+  metadata   Json
+  lastSync   DateTime       @map("last_sync")
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  signatories ContractSignatory[]
+  escrow      ContractEscrow?
+  incidents   ContractIncident[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("contract_cache")
+}
+
+model ContractSignatory {
+  id              String  @id @default(uuid())
+  contractCacheId String  @map("contract_cache_id")
+  email           String
+  name            String?
+  role            Int     @default(1)
+  walletAddress   String? @map("wallet_address")
+  isRegistered    Boolean @default(false) @map("is_registered")
+
+  contract ContractCache @relation(fields: [contractCacheId], references: [id], onDelete: Cascade)
+
+  @@index([contractCacheId])
+  @@index([email])
+  @@map("contract_signatories")
+}
+
+// ==================== ESCROW (fiat, off-chain) ====================
+//
+// Escrow is deliberately NOT handled on-chain: the target audience isn't expected to
+// manage crypto wallets, and a fiat amount held over weeks would otherwise drift in
+// value against a volatile token. Money movement itself waits on a real payment
+// aggregator (see backend/services/payments) — until PAYMENTS_ENABLED=true, escrow
+// stays in PENDING_DEPOSIT and no funds are ever actually collected.
+//
+// The deadline is honored exactly: both parties get reminded at T-72h, T-48h and T-24h,
+// and — unless the creator has blocked it — the escrow releases automatically right at
+// the deadline. This state machine runs independently of the payment provider and can be
+// exercised as soon as deposits are real.
+
+enum EscrowStatus {
+  PENDING_DEPOSIT // Declared at contract creation, not yet paid by the creator.
+  DEPOSITED // Funds collected by the payment provider (not active until wired).
+  RELEASED // Funds released to the counterparty — by creator action or automatically at the deadline.
+  DISPUTED // Creator blocked the release before the deadline — held pending manual resolution.
+  REFUNDED // Dispute resolved in the creator's favor (manual, for now).
+}
+
+model ContractEscrow {
+  id               String       @id @default(uuid())
+  contractCacheId  String       @unique @map("contract_cache_id")
+  amount           Decimal      @db.Decimal(14, 2)
+  currency         String       @default("XOF")
+  penaltyPercent   Int          @default(0) @map("penalty_percent")
+  deadline         DateTime
+  status           EscrowStatus @default(PENDING_DEPOSIT)
+  payerUserId      String?      @map("payer_user_id")
+  provider         String?
+  providerRef      String?      @map("provider_ref")
+  depositedAt      DateTime?    @map("deposited_at")
+  reminder72SentAt DateTime?    @map("reminder_72_sent_at")
+  reminder48SentAt DateTime?    @map("reminder_48_sent_at")
+  reminder24SentAt DateTime?    @map("reminder_24_sent_at")
+  releasedAt       DateTime?    @map("released_at")
+  disputedAt       DateTime?    @map("disputed_at")
+  disputeReason    String?      @map("dispute_reason") @db.Text
+  refundedAt       DateTime?    @map("refunded_at")
+  // The actual amount released — equal to `amount` unless a delay penalty was applied when
+  // resolving a DISPUTED escrow (see EscrowService.resolveDispute), in which case it's
+  // `amount` reduced by `penaltyPercent`. Null until actually released. Distinct from
+  // `amount` (the declared/deposited total) precisely so a penalty is a recorded fact, not
+  // something inferred after the fact from penaltyApplied + penaltyPercent alone.
+  releasedAmount   Decimal?     @db.Decimal(14, 2) @map("released_amount")
+  penaltyApplied   Boolean      @default(false) @map("penalty_applied")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  contract ContractCache @relation(fields: [contractCacheId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("contract_escrows")
+}
+
+// ==================== CONTRACT INCIDENTS (litiges / pauses, hors-chaîne) ====================
+//
+// ContractManager.sol n'a aucun mécanisme de litige (hors périmètre du mémoire) : litiges et
+// pauses sont gérés entièrement ici, hors-chaîne.
+//
+// DISPUTE : une partie signale un problème, prend effet immédiatement (pas besoin de
+// l'accord de l'autre pour EXISTER, seulement pour être résolu).
+// HOLD : pause mutuelle sans faute alléguée — ne gèle rien tant que l'autre partie ne l'a
+// pas acceptée (sinon n'importe qui pourrait geler un contrat unilatéralement).
+
+enum IncidentType {
+  DISPUTE
+  HOLD
+}
+
+enum IncidentReason {
+  NON_PAYMENT
+  POOR_QUALITY_WORK
+  DELAYS_IN_PERFORMANCE
+  BREACH_OF_CONFIDENTIALITY
+  INTELLECTUAL_PROPERTY_DISPUTE
+  MUTUAL_TIMEOUT
+  OTHER
+}
+
+enum IncidentStatus {
+  OPEN               // DISPUTE : ouvert, en attente de résolution. HOLD : proposé, en attente de réponse.
+  ACCEPTED_ACTIVE     // HOLD accepté par l'autre partie — gèle effectivement l'escrow/l'échéance.
+  REJECTED            // HOLD refusé par l'autre partie — n'a jamais pris effet.
+  RESOLVED
+  WITHDRAWN
+}
+
+model ContractIncident {
+  id              String          @id @default(uuid())
+  contractCacheId String          @map("contract_cache_id")
+  type            IncidentType
+  reason          IncidentReason
+  customReason    String?         @map("custom_reason")
+  description     String          @db.Text
+  proofIpfsHash   String?         @map("proof_ipfs_hash")
+  requiresConsent Boolean         @default(false) @map("requires_consent") // true pour un HOLD
+  status          IncidentStatus  @default(OPEN)
+  raisedByUserId  String          @map("raised_by_user_id")
+  respondedByUserId String?       @map("responded_by_user_id")
+  respondedAt     DateTime?       @map("responded_at")
+  resolution      String?         @db.Text
+  resolvedByUserId String?        @map("resolved_by_user_id")
+  resolvedAt      DateTime?       @map("resolved_at")
+  onchainTxHash   String?         @map("onchain_tx_hash") // champ legacy, plus jamais renseigné (voir note de module ci-dessus)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  contract ContractCache @relation(fields: [contractCacheId], references: [id], onDelete: Cascade)
+
+  @@index([contractCacheId])
+  @@index([status])
+  @@map("contract_incidents")
+}
+
+// ==================== SYNC CURSOR ====================
+//
+// blockchain-sync.js used to keep the last-scanned block number as an in-memory instance
+// property, fine for a single long-lived Express process. A Netlify Scheduled Function has
+// no such thing — each invocation is a fresh process — so the cursor has to live in the
+// database instead to survive between ticks. Single row (id=1), upserted every tick.
+model SyncCursor {
+  id               Int      @id @default(1)
+  lastScannedBlock Int      @map("last_scanned_block")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("sync_cursors")
+}
+
+// ==================== NOTIFICATIONS ====================
+
+enum NotificationType {
+  ESCROW_REMINDER
+  ESCROW_RELEASED
+  ESCROW_DISPUTED
+  CONTRACT_READY_TO_DEPLOY
+  CONTRACT_TERMINATED
+  CONTRACT_DISPUTE_OPENED
+  CONTRACT_HOLD_PROPOSED
+  CONTRACT_HOLD_ACCEPTED
+  CONTRACT_HOLD_REJECTED
+  CONTRACT_INCIDENT_RESOLVED
+  GENERIC
+}
+
+model Notification {
+  id              String           @id @default(uuid())
+  userId          String           @map("user_id")
+  type            NotificationType @default(GENERIC)
+  title           String
+  message         String
+  contractCacheId String?          @map("contract_cache_id")
+  read            Boolean          @default(false)
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+// ==================== IPFS DOCUMENTS ====================
+
+// Le nom du modèle et le champ `cid` restent tels quels pour ne pas toucher au smart contract
+// déjà déployé (son paramètre s'appelle `ipfsHash`) ni aux nombreux appelants existants.
+// Depuis le passage au chiffrement local (mémoire, chapitre 2), `cid` n'est plus un vrai CID
+// IPFS mais une référence "local-<sha256 du texte clair>" (voir utils/document-crypto.js),
+// et `fileData` contient le document CHIFFRÉ, plus jamais envoyé à un service tiers.
+model IpfsDocument {
+  id         String   @id @default(uuid())
+  cid        String   @unique
+  fileName   String   @map("file_name")
+  fileSize   Int      @map("file_size")
+  mimeType   String?  @map("mime_type")
+  uploadedBy String?  @map("uploaded_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+  // Document chiffré (AES-256-GCM) — jamais le texte clair.
+  fileData         Bytes?  @map("file_data")
+  encryptionIv     Bytes?  @map("encryption_iv")
+  encryptionAuthTag Bytes? @map("encryption_auth_tag")
+  // Clé de document, elle-même chiffrée avec la clé maître (MASTER_ENCRYPTION_KEY) — voir
+  // utils/document-crypto.js. Une valeur NULL sur ces quatre colonnes de chiffrement signale
+  // une ligne créée avant ce changement (import Pinata historique) ; proxyDocument la traite
+  // comme non déchiffrable plutôt que d'échouer silencieusement.
+  wrappedKey    Bytes? @map("wrapped_key")
+  keyIv         Bytes? @map("key_iv")
+  keyAuthTag    Bytes? @map("key_auth_tag")
+
+  @@map("ipfs_documents")
+}
+
+// ==================== REFRESH TOKENS ====================
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  tokenHash  String   @unique @map("token_hash")
+  userId     String   @map("user_id")
+  revoked    Boolean  @default(false)
+  replacedBy String?  @map("replaced_by")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+  expiresAt  DateTime @map("expires_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}

@@ -1,0 +1,36 @@
+{
+  "name": "cachetify-contracts",
+  "version": "1.0.0",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@typechain/ethers-v6": "^0.5.1",
+    "@typechain/hardhat": "^9.0.0",
+    "@types/chai": "^4.3.0",
+    "@types/mocha": "^10.0.0",
+    "chai": "^4.3.0",
+    "ethers": "^6.16.0",
+    "hardhat": "^2.19.0",
+    "ts-node": "^10.9.0",
+    "typechain": "^8.3.0",
+    "typescript": "^5.0.0"
+  },
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "node --loader ts-node/esm node_modules/hardhat/internal/cli/cli.js test",
+    "deploy": "hardhat run scripts/deploy.ts --network amoy",
+    "node": "hardhat node"
+  },
+  "type": "module",
+  "dependencies": {
+    "@openzeppelin/contracts": "4.9.0",
+    "dotenv": "^17.2.3",
+    "minimatch": "^10.1.1"
+  },
+  "overrides": {
+    "handlebars": "^4.7.9"
+  }
+}

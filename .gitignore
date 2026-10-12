@@ -1,19 +1,47 @@
-# Environment variables
-.env
-.env.local
-.env.*.local
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
-# Node modules
-node_modules/
-npm-debug.log
-yarn-error.log
-pnpm-debug.log
+# testing
+/coverage
+.nyc_output/
 
-# Build outputs
-dist/
-build/
-.next/
-out/
+# next.js
+/.next/
+/out/
+
+# production
+/build
+/dist
+
+# logs
+logs/
+*.log
+build-*.txt
+lint-*.txt
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# misc
+.DS_Store
+Thumbs.db
+*.pem
+*-output.txt
+build-full.txt
+*.db
+*.sqlite
+*.sqlite3
+.cache/
+tmp/
+temp/
 
 # IDE
 .vscode/
@@ -21,37 +49,17 @@ out/
 *.swp
 *.swo
 *~
-.DS_Store
-.sublime-project
-.sublime-workspace
 
-# OS
-Thumbs.db
-.DS_Store
+# env files — .env.example is the template documenting which variables exist and must stay
+# tracked; without this exception it silently matched the blanket .env* pattern below and
+# was never actually version-controlled.
+.env*
+!.env.example
 
-# Testing
-coverage/
-.nyc_output/
+# vercel / netlify
+.vercel
+.netlify
 
-# Logs
-logs/
-*.log
-build-*.txt
-lint-*.txt
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Cache
-.cache/
-
-# Temporary files
-tmp/
-temp/
-
-# Dependencies lock files (optional - uncomment if needed)
-# package-lock.json
-# yarn.lock
-# pnpm-lock.yaml
+# typescript
+*.tsbuildinfo
+next-env.d.ts
