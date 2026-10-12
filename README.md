@@ -20,16 +20,24 @@ Built as the practical component of a Licence (undergraduate) thesis in Software
 
 ## Architecture
 
-A conventional web app (Next.js frontend, Express/PostgreSQL backend) sits in front of a single, deliberately narrow smart contract. Everyday operations — accounts, drafting, encrypted storage, email — stay off-chain; only the proof is public. See [`blockchain/SMART_CONTRACTS.md`](./blockchain/SMART_CONTRACTS.md) for exactly what the contract does and doesn't do.
+A single full-stack Next.js app (App Router, API routes included) sits in front of one deliberately narrow smart contract. Everyday operations — accounts, drafting, encrypted storage, email — stay off-chain in Postgres; only the proof is public. See [`contracts/SMART_CONTRACTS.md`](./contracts/SMART_CONTRACTS.md) for exactly what the contract does and doesn't do.
 
 ```
 contractify/
-├── backend/       Express API, Prisma/PostgreSQL, AI orchestration, document encryption
-├── frontend/      Next.js app (App Router)
-└── blockchain/    ContractManager.sol + Hardhat tests/deploy scripts
+├── src/
+│   ├── app/        Pages and API routes (app/api/**/route.js)
+│   ├── components/ React components
+│   ├── lib/        Client-side utilities and API clients
+│   └── server/     Server-side logic: services, db client, auth/rate-limit/error helpers
+├── prisma/         Schema and migrations (PostgreSQL)
+├── netlify/
+│   └── functions/  Scheduled function keeping the on-chain contract cache in sync
+└── contracts/      ContractManager.sol + Hardhat tests/deploy scripts (its own npm project)
 ```
 
-A few features — escrow and identity verification (KYC) — exist in the codebase but sit outside the thesis's scope; they're feature-flagged off by default rather than deleted. See `backend/config/index.js`.
+`contracts/` is a separate npm project (its own `package.json`, own `node_modules`) — Hardhat's toolchain isn't bundled into the app. It shares the same root `.env`.
+
+A few features — escrow and identity verification (KYC) — exist in the codebase but sit outside the thesis's scope; escrow is feature-flagged off by default rather than deleted. See `src/server/config.js`.
 
 ## Getting started
 
@@ -38,64 +46,55 @@ A few features — escrow and identity verification (KYC) — exist in the codeb
 ```bash
 git clone https://github.com/Juste130/contractify.git
 cd contractify
-
-cd backend && npm install
-cd ../frontend && npm install
+npm install
 ```
 
-Copy the env templates and fill them in — never commit the results:
+Copy the env template and fill it in — never commit the result:
 
 ```bash
-cp backend/.env.example backend/.env
-cp frontend/.env.example frontend/.env.local
+cp .env.example .env
 ```
 
-`backend/.env` needs at minimum `DATABASE_URL`, `MASTER_ENCRYPTION_KEY`, `JWT_SECRET`/`JWT_REFRESH_SECRET`, `ALCHEMY_POLYGON_TESTNET_RPC_URL`, `CONTRACT_MANAGER_ADDRESS`, `ADMIN_WALLET_ADDRESS`, `GROQ_API_KEY`, and `PRIVY_APP_ID`/`PRIVY_APP_SECRET`. The server validates these on boot and refuses to start in production if any are missing — see `backend/config/index.js`. `frontend/.env.local` needs `NEXT_PUBLIC_API_URL` and `NEXT_PUBLIC_PRIVY_APP_ID`. Anything prefixed `NEXT_PUBLIC_` ships in client-side JS — never put a secret there.
+One `.env` for everything: at minimum `DATABASE_URL`, `MASTER_ENCRYPTION_KEY`, `JWT_SECRET`/`JWT_REFRESH_SECRET`, `ALCHEMY_POLYGON_TESTNET_RPC_URL`, `CONTRACT_MANAGER_ADDRESS` (and its client-visible twin `NEXT_PUBLIC_CONTRACT_MANAGER_ADDRESS`), `ADMIN_WALLET_ADDRESS`, `GROQ_API_KEY`, `PRIVY_APP_ID`/`PRIVY_APP_SECRET` (and `NEXT_PUBLIC_PRIVY_APP_ID`). The app validates these on boot and refuses to start in production if any are missing — see `src/server/config.js`. Anything prefixed `NEXT_PUBLIC_` ships in client-side JS — never put a secret there.
 
 ```bash
-cd backend
 npx prisma migrate dev
 npx prisma generate
 ```
 
-Then, in two terminals:
-
 ```bash
-cd backend && npm run dev   # http://localhost:5000
-cd frontend && npm run dev  # http://localhost:3000
+npm run dev   # http://localhost:3000, frontend and API together
 ```
 
 ## Deployment
 
-Frontend and backend deploy independently.
+One deployable: Netlify builds the Next.js app (`@netlify/plugin-nextjs`) and runs `netlify/functions/` as serverless/scheduled functions — see `netlify.toml`. Set the `.env` variables above as Netlify environment variables (both the plain and `NEXT_PUBLIC_` ones, as needed). `.github/workflows/ci.yml` runs install, lint, build, and tests on every push/PR as a quality gate; the actual deploy is triggered by Netlify's own GitHub integration.
 
-- **Frontend (Vercel):** Root Directory set to `frontend`. Deploys automatically on push to `main`.
-- **Backend (Render + Supabase):** Render builds the API from `backend/Dockerfile`. Supabase provides managed PostgreSQL — use its pooled connection string (port 6543) as `DATABASE_URL` and the direct one (port 5432) as `DIRECT_URL`, since Prisma needs both. Free-tier Render services spin down after 15 minutes idle; the next request takes 30-50s to wake up.
-- **CI:** `.github/workflows/ci.yml` runs install, lint, build, and tests on every push/PR — a quality gate, not a deploy trigger. Actual deploys are handled by Vercel's and Render's own GitHub integrations.
+`contracts/` is never deployed with the app — it's a local dev tool for compiling, testing, and deploying the smart contract directly to Polygon (see `contracts/scripts/deploy.ts`).
 
 ## API
 
-Authentication runs entirely through Privy — there's no email/password or OAuth flow. Creating and signing a contract are direct on-chain transactions sent from the frontend through the signer's Privy wallet, not backend endpoints.
+Authentication runs entirely through Privy — there's no email/password or OAuth flow. Creating and signing a contract are direct on-chain transactions sent from the browser through the signer's Privy wallet, not API routes.
 
 | Route | Purpose |
 |---|---|
 | `POST /api/contracts/draft` | Save a contract draft |
 | `POST /api/contracts/draft/:id/deploy` | Mark a draft as deployed on-chain |
 | `GET /api/contracts/cached` | List the user's contracts, synced from the blockchain |
-| `POST /api/contracts/sync/:contractId` | Re-sync one contract from the chain |
-| `GET /api/contracts/:contractId` | Get contract details |
+| `POST /api/contracts/sync/:id` | Re-sync one contract from the chain |
+| `GET /api/contracts/:id` | Get contract details |
 
-See `backend/routes/` for the complete list (`ai.js`, `ipfs.js`, `user.js`, and others).
+See `src/app/api/` for the complete route tree (`ai/`, `ipfs/`, `users/`, and others).
 
 ## Security
 
-Documents are encrypted at rest (AES-256-GCM, one key per document, the master key kept outside the database); wallet custody is Privy's responsibility, not this app's. Endpoints sit behind rate limiting, Helmet, restricted CORS, and `express-validator` input checks. See [`escrow-onchain-deferred.md`](./escrow-onchain-deferred.md) and [`nft-architecture-deferred.md`](./nft-architecture-deferred.md) for two design decisions made and resolved along the way.
+Documents are encrypted at rest (AES-256-GCM, one key per document, the master key kept outside the database); wallet custody is Privy's responsibility, not this app's. Endpoints sit behind rate limiting and input validation; frontend and API being same-origin removes an entire class of CORS/cross-site cookie configuration that a split deployment used to need. See [`escrow-onchain-deferred.md`](./escrow-onchain-deferred.md) and [`nft-architecture-deferred.md`](./nft-architecture-deferred.md) for two design decisions made and resolved along the way.
 
 ## Testing
 
 ```bash
-cd blockchain && npx hardhat test   # smart contract
-cd backend && npm test              # Jest: AI guardrails, encryption, certificate/verification, escrow, incidents
+npm test                       # Jest: AI guardrails, encryption, certificate/verification, escrow, incidents
+cd contracts && npx hardhat test  # smart contract
 ```
 
 The frontend has no test script configured yet.
