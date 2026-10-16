@@ -1,5 +1,5 @@
 import type { Config } from '@netlify/functions';
-// @ts-expect-error - plain CommonJS module, shared with the Next.js app's API routes.
+// Plain CommonJS module, shared with the Next.js app's API routes (typed via allowJs).
 import blockchainSyncService from '../../src/server/services/blockchain-sync';
 
 /**
