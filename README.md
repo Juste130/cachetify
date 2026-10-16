@@ -23,7 +23,7 @@ Built as the practical component of a Licence (undergraduate) thesis in Software
 A single full-stack Next.js app (App Router, API routes included) sits in front of one deliberately narrow smart contract. Everyday operations — accounts, drafting, encrypted storage, email — stay off-chain in Postgres; only the proof is public. See [`contracts/SMART_CONTRACTS.md`](./contracts/SMART_CONTRACTS.md) for exactly what the contract does and doesn't do.
 
 ```
-contractify/
+cachetify/
 ├── src/
 │   ├── app/        Pages and API routes (app/api/**/route.js)
 │   ├── components/ React components
@@ -44,8 +44,8 @@ A few features — escrow and identity verification (KYC) — exist in the codeb
 **Requirements:** Node 20+, PostgreSQL 14+, an Alchemy API key (Polygon RPC), and a funded Polygon Amoy testnet wallet if you intend to deploy the contract yourself.
 
 ```bash
-git clone https://github.com/Juste130/contractify.git
-cd contractify
+git clone https://github.com/Juste130/cachetify.git
+cd cachetify
 npm install
 ```
 
