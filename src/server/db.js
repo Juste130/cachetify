@@ -18,7 +18,10 @@ const prisma = globalForPrisma.__cachetifyPrisma || new PrismaClient({
     ],
 });
 
-if (process.env.NODE_ENV === 'development') {
+// The listener must be registered once too: the client above is reused across reloads, so
+// re-registering it here on every evaluation would pile up listeners (each one keeping its
+// own logger instance alive) and grow the dev server's memory with every save.
+if (process.env.NODE_ENV === 'development' && !globalForPrisma.__cachetifyPrisma) {
     globalForPrisma.__cachetifyPrisma = prisma;
     prisma.$on('query', (e) => {
         logger.debug('Query: ' + e.query);

@@ -8,7 +8,12 @@ const logFormat = winston.format.combine(
     winston.format.json()
 );
 
-const logger = winston.createLogger({
+// Cached on globalThis for the same reason as the Prisma client (see ../db.js): Next.js dev
+// re-evaluates this module on every reload, and each evaluation would otherwise open two new
+// log file streams that are never closed.
+const globalForLogger = globalThis;
+
+const logger = globalForLogger.__cachetifyLogger || winston.createLogger({
     level: config.logLevel,
     format: logFormat,
     defaultMeta: { service: 'cachetify-backend' },
@@ -43,5 +48,9 @@ const logger = winston.createLogger({
         }),
     ],
 });
+
+if (process.env.NODE_ENV === 'development') {
+    globalForLogger.__cachetifyLogger = logger;
+}
 
 module.exports = logger;

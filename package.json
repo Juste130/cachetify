@@ -6,7 +6,7 @@
   "author": "Sènami Juste HOUEZO",
   "license": "MIT",
   "scripts": {
-    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=4096 next dev --turbo",
+    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=3072 next dev --turbo",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
