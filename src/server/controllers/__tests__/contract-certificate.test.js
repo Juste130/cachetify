@@ -21,8 +21,13 @@ const blockchainSyncService = require('../../services/blockchain-sync');
 const ipfsService = require('../../services/ipfs');
 const { storeCertificate } = require('../contract');
 
-function mockRes() {
-    return { status: jest.fn().mockReturnThis(), json: jest.fn() };
+// Depuis la fusion en une seule app Next.js, storeCertificate n'est plus un handler Express
+// (req, res, next) : la route lui passe (user, contractId, file), où file est un File Web
+// (FormData), et il renvoie le résultat ou lève une AppError que la route traduit en statut.
+const OWNER = { userId: 'user-1', role: 'USER' };
+
+function pdfFile() {
+    return new File([Buffer.from('certificat pdf')], 'cert.pdf', { type: 'application/pdf' });
 }
 
 const BASE_CONTRACT = { id: 'row-1', userId: 'user-1', contractId: 42, metadata: {}, signatories: [] };
@@ -35,16 +40,9 @@ describe('storeCertificate', () => {
         ipfsService.uploadDocument.mockResolvedValue({ cid: 'local-abc' });
         prisma.$executeRaw.mockResolvedValue(1); // une ligne affectée : on a gagné la course
 
-        const req = {
-            params: { contractId: '42' },
-            user: { userId: 'user-1', role: 'USER' },
-            file: { buffer: Buffer.from('certificat pdf'), originalname: 'cert.pdf', mimetype: 'application/pdf' },
-        };
-        const res = mockRes();
-        await storeCertificate(req, res, jest.fn());
+        const payload = await storeCertificate(OWNER, '42', pdfFile());
 
         expect(ipfsService.uploadDocument).toHaveBeenCalledTimes(1);
-        const payload = res.json.mock.calls[0][0];
         expect(payload.alreadyExisted).toBe(false);
         expect(payload.cid).toBe('local-abc');
         expect(payload.sha256Hash).toMatch(/^[0-9a-f]{64}$/);
@@ -56,16 +54,10 @@ describe('storeCertificate', () => {
             metadata: { certificateCid: 'local-existant', certificateSha256Hash: 'hash-existant' },
         });
 
-        const req = {
-            params: { contractId: '42' },
-            user: { userId: 'user-1', role: 'USER' },
-            file: { buffer: Buffer.from('certificat pdf'), originalname: 'cert.pdf', mimetype: 'application/pdf' },
-        };
-        const res = mockRes();
-        await storeCertificate(req, res, jest.fn());
+        const payload = await storeCertificate(OWNER, '42', pdfFile());
 
         expect(ipfsService.uploadDocument).not.toHaveBeenCalled();
-        expect(res.json).toHaveBeenCalledWith({ cid: 'local-existant', sha256Hash: 'hash-existant', alreadyExisted: true });
+        expect(payload).toEqual({ cid: 'local-existant', sha256Hash: 'hash-existant', alreadyExisted: true });
     });
 
     it("gère la course : si l'UPDATE conditionnel n'affecte aucune ligne, renvoie la version du gagnant", async () => {
@@ -76,15 +68,8 @@ describe('storeCertificate', () => {
             metadata: { certificateCid: 'local-gagnant', certificateSha256Hash: 'hash-gagnant' },
         });
 
-        const req = {
-            params: { contractId: '42' },
-            user: { userId: 'user-1', role: 'USER' },
-            file: { buffer: Buffer.from('certificat pdf'), originalname: 'cert.pdf', mimetype: 'application/pdf' },
-        };
-        const res = mockRes();
-        await storeCertificate(req, res, jest.fn());
+        const payload = await storeCertificate(OWNER, '42', pdfFile());
 
-        const payload = res.json.mock.calls[0][0];
         expect(payload.alreadyExisted).toBe(true);
         expect(payload.cid).toBe('local-gagnant');
     });
@@ -92,23 +77,12 @@ describe('storeCertificate', () => {
     it("refuse un utilisateur qui n'a pas accès à ce contrat", async () => {
         blockchainSyncService.getCachedContract.mockResolvedValue(BASE_CONTRACT);
 
-        const req = {
-            params: { contractId: '42' },
-            user: { userId: 'quelqu-un-dautre', role: 'USER' },
-            file: { buffer: Buffer.from('certificat pdf'), originalname: 'cert.pdf', mimetype: 'application/pdf' },
-        };
-        const res = mockRes();
-        await storeCertificate(req, res, jest.fn());
-
-        expect(res.status).toHaveBeenCalledWith(403);
+        await expect(storeCertificate({ userId: 'quelqu-un-dautre', role: 'USER' }, '42', pdfFile()))
+            .rejects.toMatchObject({ statusCode: 403 });
         expect(ipfsService.uploadDocument).not.toHaveBeenCalled();
     });
 
     it('rejette une requête sans fichier', async () => {
-        const req = { params: { contractId: '42' }, user: { userId: 'user-1', role: 'USER' }, file: undefined };
-        const res = mockRes();
-        await storeCertificate(req, res, jest.fn());
-
-        expect(res.status).toHaveBeenCalledWith(400);
+        await expect(storeCertificate(OWNER, '42', undefined)).rejects.toMatchObject({ statusCode: 400 });
     });
 });

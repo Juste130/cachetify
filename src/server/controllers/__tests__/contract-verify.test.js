@@ -32,10 +32,9 @@ describe('toInitials', () => {
     });
 });
 
-function mockRes() {
-    return { status: jest.fn().mockReturnThis(), json: jest.fn() };
-}
-
+// Depuis la fusion en une seule app Next.js, getPublicVerification reçoit directement le jeton
+// et renvoie la réponse (ou lève une NotFoundError que la route traduit en 404), au lieu d'un
+// handler Express (req, res, next).
 describe('getPublicVerification', () => {
     beforeEach(() => jest.clearAllMocks());
 
@@ -51,11 +50,8 @@ describe('getPublicVerification', () => {
             signatories: [{ name: 'Jean DOSSOU', walletAddress: null }],
         });
 
-        const req = { params: { token: 'un-jeton-non-devinable' } };
-        const res = mockRes();
-        await getPublicVerification(req, res, jest.fn());
+        const payload = await getPublicVerification('un-jeton-non-devinable');
 
-        const payload = res.json.mock.calls[0][0];
         expect(payload.title).toBeUndefined();
         expect(payload.signatories[0].initials).toBe('J.D.');
         expect(payload.signatories[0].name).toBeUndefined();
@@ -64,14 +60,12 @@ describe('getPublicVerification', () => {
 
     it("recherche uniquement par jeton public, jamais par identifiant numérique", async () => {
         prisma.contractCache.findUnique.mockResolvedValue(null);
-        const req = { params: { token: '42' } }; // un ancien identifiant numérique
-        const res = mockRes();
-        await getPublicVerification(req, res, jest.fn());
+        // un ancien identifiant numérique
+        await expect(getPublicVerification('42')).rejects.toMatchObject({ statusCode: 404 });
 
         expect(prisma.contractCache.findUnique).toHaveBeenCalledWith({
             where: { publicToken: '42' },
             include: { signatories: true },
         });
-        expect(res.status).toHaveBeenCalledWith(404);
     });
 });
