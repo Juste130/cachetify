@@ -18,7 +18,17 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
+      // Separate Hardhat project with its own toolchain and node_modules.
+      "contracts/**",
     ],
+  },
+  {
+    // Server code and scripts are plain CommonJS (carried over from the former Express
+    // backend), so require() is intended there, not a mistake to flag.
+    files: ["src/server/**/*.js", "scripts/**/*.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
   },
   {
     rules: {

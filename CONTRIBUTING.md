@@ -5,8 +5,8 @@ Notes on the development workflow for this repository — a single full-stack Ne
 ## Setup
 
 ```bash
-git clone https://github.com/Juste130/contractify.git
-cd contractify
+git clone https://github.com/Juste130/cachetify.git
+cd cachetify
 npm install
 cp .env.example .env   # fill in real values, never commit the result
 npx prisma migrate dev

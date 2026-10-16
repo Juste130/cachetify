@@ -1,110 +1,198 @@
+<div align="center">
+
+<img src="./public/mark-seal.svg" alt="Cachetify" width="88" />
+
 # Cachetify
 
-Cachetify lets someone with no legal or technical background draft a contract with AI assistance, have every party sign it, and prove — months later, to anyone, without trusting Cachetify itself — that the document hasn't been altered since. The SHA-256 fingerprint of the document, the signers' addresses, and each signature's timestamp are anchored on the Polygon blockchain; the document itself stays encrypted, off-chain.
+**Draft a contract with AI, have every party sign it, and prove it was never altered, without having to trust Cachetify.**
 
-Built as the practical component of a Licence (undergraduate) thesis in Software Engineering at IFRI-UAC (Bénin).
-
-[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933)](https://nodejs.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-15-000000)](https://nextjs.org/)
-[![Polygon](https://img.shields.io/badge/Polygon-Amoy-8247E5)](https://polygon.technology/)
+[![CI](https://github.com/Juste130/cachetify/actions/workflows/ci.yml/badge.svg)](https://github.com/Juste130/cachetify/actions/workflows/ci.yml)
+[![Next.js](https://img.shields.io/badge/Next.js-15-000000?logo=nextdotjs)](https://nextjs.org/)
+[![Polygon](https://img.shields.io/badge/Polygon-Amoy-8247E5?logo=polygon)](https://polygon.technology/)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=nodedotjs&logoColor=white)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-## What it does
+[Features](#features) · [How it works](#how-it-works) · [Getting started](#getting-started) · [Deployment](#deployment) · [Testing](#testing) · [Security](#security)
 
-- **AI-assisted drafting** — generates a contract from a plain-language description (Groq, `openai/gpt-oss-120b`) and flags missing clauses before signature.
-- **On-chain proof, not on-chain content** — only the document's hash, its storage reference, the signers' addresses, and each signature's date are written to the smart contract. The contract text itself never touches the chain.
-- **Multi-party signing** — every signer confirms on-chain; the contract activates automatically once the last signature lands.
-- **Independent verification** — a public page re-reads the hash and signatures directly from the blockchain, from the visitor's own browser, with no dependency on Cachetify's servers.
-- **Encrypted storage** — documents are encrypted at rest (AES-256-GCM, one key per document, master key held outside the database).
-- **Wallet-free for the user** — Privy provisions and custodies an embedded wallet per account and sponsors gas, so a signer never sees a seed phrase or pays a transaction fee.
+</div>
+
+---
+
+## Overview
+
+Cachetify is a contract management platform for people with no legal or technical background. A user describes the agreement in plain language, the AI drafts it, every party signs, and the proof of what was signed is anchored on the Polygon blockchain.
+
+The document itself never goes on-chain. Only its **SHA-256 fingerprint**, the **signers' addresses** and the **date of each signature** are written to the smart contract. The document stays encrypted, off-chain. Months later, anyone can check that a certificate matches what was signed, by reading the blockchain directly, without relying on Cachetify's servers.
+
+Built as the practical component of a Licence (undergraduate) thesis in Software Engineering at **IFRI, Université d'Abomey-Calavi (Bénin)**.
+
+## Features
+
+| | |
+|---|---|
+| **AI-assisted drafting** | Generates a contract from a plain-language description (Groq, `openai/gpt-oss-120b` by default), suggests and improves clauses, and flags missing ones before signature. |
+| **On-chain proof, off-chain content** | Only the hash, the signers and the signature dates are public. The contract text never touches the chain. |
+| **Multi-party signing** | Each signer confirms on-chain. The contract activates automatically once the last signature lands. |
+| **Independent verification** | Each certificate carries a QR code pointing to a public page that re-reads the hash and signatures from the blockchain, in the visitor's own browser. Signers appear as initials only. |
+| **Encrypted storage** | Documents are encrypted at rest with AES-256-GCM, one key per document, under a master key held outside the database. |
+| **No crypto knowledge needed** | Privy creates an embedded wallet for each account and sponsors gas: a signer never sees a seed phrase or pays a transaction fee. |
+
+## How it works
+
+```mermaid
+flowchart LR
+    A["1 · Draft<br/>AI-assisted, in the browser"] --> B["2 · Sign<br/>each party, on Polygon"]
+    B --> C["3 · Prove<br/>public page + QR code"]
+
+    A -. "encrypted document" .-> DB[(PostgreSQL)]
+    B -. "hash · signers · dates" .-> SC{{ContractManager.sol}}
+    C -. "reads directly" .-> SC
+```
+
+1. **Draft.** The creator writes or imports the contract, assisted by the AI. The encrypted document is stored in PostgreSQL.
+2. **Sign.** The contract is registered on-chain with its fingerprint. Each party signs from their Privy wallet. Signatures are direct blockchain transactions from the browser, not API calls.
+3. **Prove.** Once all parties have signed, an official certificate is issued. Anyone can scan its QR code and check the fingerprint and signatures against the blockchain.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Application | Next.js 15 (App Router, Route Handlers), React 19, TypeScript, Tailwind CSS 4, Radix UI |
+| Data | PostgreSQL with Prisma 5 |
+| Authentication and wallets | Privy (email and Google login, embedded wallets, gas sponsorship) |
+| Blockchain | Solidity smart contract on Polygon Amoy, ethers.js 6, Hardhat |
+| AI | Groq API |
+| Hosting | Netlify (Next.js runtime and scheduled functions) |
 
 ## Architecture
 
-A single full-stack Next.js app (App Router, API routes included) sits in front of one deliberately narrow smart contract. Everyday operations — accounts, drafting, encrypted storage, email — stay off-chain in Postgres; only the proof is public. See [`contracts/SMART_CONTRACTS.md`](./contracts/SMART_CONTRACTS.md) for exactly what the contract does and doesn't do.
+A single full-stack Next.js application sits in front of one deliberately narrow smart contract. Everyday operations (accounts, drafting, encrypted storage, email) stay off-chain in PostgreSQL. Only the proof is public. See [`contracts/SMART_CONTRACTS.md`](./contracts/SMART_CONTRACTS.md) for exactly what the contract does and does not do.
 
 ```
-contractify/
+cachetify/
 ├── src/
-│   ├── app/        Pages and API routes (app/api/**/route.js)
-│   ├── components/ React components
-│   ├── lib/        Client-side utilities and API clients
-│   └── server/     Server-side logic: services, db client, auth/rate-limit/error helpers
-├── prisma/         Schema and migrations (PostgreSQL)
+│   ├── app/          Pages and API routes (app/api/**/route.js)
+│   ├── components/   React components
+│   ├── hooks/        React hooks (auth, contract interactions)
+│   ├── lib/          Client utilities, API clients, web3 helpers
+│   └── server/       Server logic: services, controllers, Prisma client, auth, rate limiting
+├── prisma/           Database schema and migrations
 ├── netlify/
-│   └── functions/  Scheduled function keeping the on-chain contract cache in sync
-└── contracts/      ContractManager.sol + Hardhat tests/deploy scripts (its own npm project)
+│   └── functions/    Scheduled function that keeps the on-chain contract cache in sync
+└── contracts/        ContractManager.sol, Hardhat tests and deploy scripts (separate npm project)
 ```
 
-`contracts/` is a separate npm project (its own `package.json`, own `node_modules`) — Hardhat's toolchain isn't bundled into the app. It shares the same root `.env`.
-
-A few features — escrow and identity verification (KYC) — exist in the codebase but sit outside the thesis's scope; escrow is feature-flagged off by default rather than deleted. See `src/server/config.js`.
+`contracts/` has its own `package.json` and `node_modules`, so Hardhat's toolchain is never bundled into the app. It reads the same root `.env`.
 
 ## Getting started
 
-**Requirements:** Node 20+, PostgreSQL 14+, an Alchemy API key (Polygon RPC), and a funded Polygon Amoy testnet wallet if you intend to deploy the contract yourself.
+### Prerequisites
+
+- Node.js 20 or later, npm 10 or later
+- PostgreSQL 14 or later (a local instance is available through `docker compose up -d`, on port 5433)
+- A Polygon Amoy RPC endpoint (Alchemy, for example)
+- A [Privy](https://www.privy.io/) app and a [Groq](https://console.groq.com/) API key
+
+### Installation
 
 ```bash
-git clone https://github.com/Juste130/contractify.git
-cd contractify
+git clone https://github.com/Juste130/cachetify.git
+cd cachetify
 npm install
+cp .env.example .env    # then fill it in, and never commit it
 ```
 
-Copy the env template and fill it in — never commit the result:
+### Environment variables
+
+The full list, with comments, is in [`.env.example`](./.env.example). The essentials:
+
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `MASTER_ENCRYPTION_KEY` | Master key used to encrypt each document's key |
+| `JWT_SECRET`, `JWT_REFRESH_SECRET` | Session token signing |
+| `POLYGON_RPC_URL` | Polygon RPC endpoint (`ALCHEMY_POLYGON_TESTNET_RPC_URL` takes precedence when set) |
+| `CONTRACT_MANAGER_ADDRESS` | Deployed `ContractManager` address |
+| `ADMIN_WALLET_ADDRESS` | Platform administrator wallet |
+| `GROQ_API_KEY` | AI drafting |
+| `PRIVY_APP_ID`, `PRIVY_APP_SECRET` | Server-side Privy verification |
+| `NEXT_PUBLIC_PRIVY_APP_ID`, `NEXT_PUBLIC_CONTRACT_MANAGER_ADDRESS`, `NEXT_PUBLIC_RPC_URL` | Same values, exposed to the browser |
+
+The app checks these on startup and **refuses to start in production** if one is missing, or if `KYC_MOCK_MODE` is not explicitly set to `false` (see [`src/server/config.js`](./src/server/config.js)). Anything prefixed with `NEXT_PUBLIC_` ships in client-side JavaScript: never put a secret there.
+
+### Database and development server
 
 ```bash
-cp .env.example .env
+npx prisma migrate dev     # apply migrations (development database only)
+npm run dev                # http://localhost:3000, frontend and API together
 ```
 
-One `.env` for everything: at minimum `DATABASE_URL`, `MASTER_ENCRYPTION_KEY`, `JWT_SECRET`/`JWT_REFRESH_SECRET`, `ALCHEMY_POLYGON_TESTNET_RPC_URL`, `CONTRACT_MANAGER_ADDRESS` (and its client-visible twin `NEXT_PUBLIC_CONTRACT_MANAGER_ADDRESS`), `ADMIN_WALLET_ADDRESS`, `GROQ_API_KEY`, `PRIVY_APP_ID`/`PRIVY_APP_SECRET` (and `NEXT_PUBLIC_PRIVY_APP_ID`). The app validates these on boot and refuses to start in production if any are missing — see `src/server/config.js`. Anything prefixed `NEXT_PUBLIC_` ships in client-side JS — never put a secret there.
+> **Testing on a phone:** Privy's embedded wallet needs a secure context, so `http://<local-ip>:3000` will not work. Use an HTTPS tunnel instead (for example `npx cloudflared tunnel --url http://localhost:3000`) and add its URL to the allowed origins in the Privy dashboard.
+
+### Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Development server (Turbopack) |
+| `npm run build` / `npm start` | Production build and server |
+| `npm run lint` | ESLint |
+| `npm test` | Jest test suite |
+| `npm run prisma:migrate` / `npm run prisma:studio` | Migrations and database browser |
+| `npm run create-admin` | Create an administrator account |
+
+## Smart contract
+
+`ContractManager.sol` records, for each contract, its SHA-256 fingerprint, a reference to the encrypted document, its signers and their roles, and the timestamp of each signature. A contract is finalized automatically when the last signature is collected. An emergency pause is available to the owner.
 
 ```bash
-npx prisma migrate dev
-npx prisma generate
+cd contracts
+npm install
+npx hardhat compile
+npx hardhat test
+npx hardhat run scripts/deploy.ts --network amoy   # deploy to Polygon Amoy
 ```
 
-```bash
-npm run dev   # http://localhost:3000, frontend and API together
-```
+The contract is never deployed with the application: `contracts/` is a development tool for compiling, testing and deploying it to Polygon. Details in [`contracts/SMART_CONTRACTS.md`](./contracts/SMART_CONTRACTS.md).
 
 ## Deployment
 
-One deployable: Netlify builds the Next.js app (`@netlify/plugin-nextjs`) and runs `netlify/functions/` as serverless/scheduled functions — see `netlify.toml`. Set the `.env` variables above as Netlify environment variables (both the plain and `NEXT_PUBLIC_` ones, as needed). `.github/workflows/ci.yml` runs install, lint, build, and tests on every push/PR as a quality gate; the actual deploy is triggered by Netlify's own GitHub integration.
+The application deploys to **Netlify** as a single unit, configured in [`netlify.toml`](./netlify.toml):
 
-`contracts/` is never deployed with the app — it's a local dev tool for compiling, testing, and deploying the smart contract directly to Polygon (see `contracts/scripts/deploy.ts`).
+- `@netlify/plugin-nextjs` builds and serves the Next.js app.
+- `netlify/functions/` runs as scheduled functions, which keep the contract cache in sync with the blockchain.
+- Every variable from `.env` must be set in the Netlify environment, including the `NEXT_PUBLIC_` ones.
 
-## API
-
-Authentication runs entirely through Privy — there's no email/password or OAuth flow. Creating and signing a contract are direct on-chain transactions sent from the browser through the signer's Privy wallet, not API routes.
-
-| Route | Purpose |
-|---|---|
-| `POST /api/contracts/draft` | Save a contract draft |
-| `POST /api/contracts/draft/:id/deploy` | Mark a draft as deployed on-chain |
-| `GET /api/contracts/cached` | List the user's contracts, synced from the blockchain |
-| `POST /api/contracts/sync/:id` | Re-sync one contract from the chain |
-| `GET /api/contracts/:id` | Get contract details |
-
-See `src/app/api/` for the complete route tree (`ai/`, `ipfs/`, `users/`, and others).
-
-## Security
-
-Documents are encrypted at rest (AES-256-GCM, one key per document, the master key kept outside the database); wallet custody is Privy's responsibility, not this app's. Endpoints sit behind rate limiting and input validation; frontend and API being same-origin removes an entire class of CORS/cross-site cookie configuration that a split deployment used to need. See [`escrow-onchain-deferred.md`](./escrow-onchain-deferred.md) and [`nft-architecture-deferred.md`](./nft-architecture-deferred.md) for two design decisions made and resolved along the way.
+Deployment is triggered by Netlify's GitHub integration. [GitHub Actions](./.github/workflows/ci.yml) runs type checking, lint, unit tests, the production build and the smart contract tests on every push, as a quality gate.
 
 ## Testing
 
 ```bash
-npm test                       # Jest: AI guardrails, encryption, certificate/verification, escrow, incidents
+npm test                          # Jest: AI guardrails, encryption, certificate and public verification, escrow, incidents
 cd contracts && npx hardhat test  # smart contract
 ```
 
-The frontend has no test script configured yet.
+## Security
 
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for coding standards and the commit/PR workflow.
+- **Encryption at rest.** AES-256-GCM with one key per document. The master key lives outside the database.
+- **Minimal public data.** The blockchain holds only the hash, the signers and the dates. The public verification page shows initials, never full names, titles or document content, and is reached through a non-guessable token.
+- **Wallet custody.** Delegated to Privy. The application never handles private keys.
+- **API protection.** Rate limiting on the sensitive endpoints (AI generation, authentication, invitations, signature reminders, wallet operations and the public verification page) and input validation.
+- **Same-origin by design.** Frontend and API share one origin, which removes a whole class of CORS and cross-site cookie issues.
+
+To report a vulnerability, please contact the maintainer privately instead of opening a public issue.
+
+## Project scope
+
+The thesis covers the **Draft → Sign → Prove** flow. Two modules exist in the codebase but sit outside that scope: an **escrow** module, disabled by default (`FEATURE_ESCROW`), and **identity verification (KYC)** through Smile ID. Design notes on deferred decisions are in [`escrow-onchain-deferred.md`](./escrow-onchain-deferred.md) and [`nft-architecture-deferred.md`](./nft-architecture-deferred.md).
+
+## Contributing
+
+Setup, coding standards and the commit and pull request workflow are described in [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+Distributed under the MIT License. See [LICENSE](./LICENSE).
 
----
+## Author
 
-Built solo by [@Juste130](https://github.com/Juste130) as the Licence thesis project at IFRI-UAC.
+**Sènami Juste HOUEZO** ([@Juste130](https://github.com/Juste130)): Licence thesis project, IFRI, Université d'Abomey-Calavi.
