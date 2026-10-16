@@ -7,7 +7,13 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useAuthStore } from "@/hooks/useAuth";
 import { Button } from "../ui/button";
 
-export function AuthAwareCta() {
+/**
+ * "inline" : boutons côte à côte (en-têtes desktop) ; sous `sm`, seul le bouton principal
+ * reste visible, les deux ouvrant de toute façon la même fenêtre de connexion Privy.
+ * "stacked" : boutons pleine largeur l'un sous l'autre, pour le menu mobile de LandingHeader.
+ */
+export function AuthAwareCta({ variant = "inline" }: { variant?: "inline" | "stacked" }) {
+  const stacked = variant === "stacked";
   const { ready, authenticated, login } = usePrivy();
   const { isAuthenticated } = useAuthStore();
   const router = useRouter();
@@ -34,8 +40,8 @@ export function AuthAwareCta() {
 
   if (isUserLoggedIn) {
     return (
-      <Link href="/dashboard">
-        <Button className="bg-[#FFC107] text-[#212121] hover:bg-[#FFB300] font-medium">
+      <Link href="/dashboard" className={stacked ? "w-full" : undefined}>
+        <Button className={`bg-[#FFC107] text-[#212121] hover:bg-[#FFB300] font-medium ${stacked ? "w-full" : ""}`}>
           Accéder à mon espace
         </Button>
       </Link>
@@ -43,14 +49,19 @@ export function AuthAwareCta() {
   }
 
   return (
-    <div className="flex items-center gap-3">
-      <Button variant="ghost" onClick={handleAuth} disabled={!ready}>
+    <div className={stacked ? "flex flex-col gap-2 w-full" : "flex items-center gap-3"}>
+      <Button
+        variant={stacked ? "outline" : "ghost"}
+        onClick={handleAuth}
+        disabled={!ready}
+        className={stacked ? "w-full" : "hidden sm:inline-flex"}
+      >
         Se connecter
       </Button>
       <Button
         onClick={handleAuth}
         disabled={!ready}
-        className="bg-[#FFC107] text-[#212121] hover:bg-[#FFB300] font-medium"
+        className={`bg-[#FFC107] text-[#212121] hover:bg-[#FFB300] font-medium ${stacked ? "w-full" : ""}`}
       >
         Commencer gratuitement
       </Button>
