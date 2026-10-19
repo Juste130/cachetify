@@ -31,7 +31,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
-    const { user, isAuthenticated, isLoading, checkAuth, sessionVerified } = useAuthStore();
+    const { user, isAuthenticated, isLoading, checkAuth, sessionVerified, loggedOutByUser } = useAuthStore();
     const router = useRouter();
     const pathname = usePathname();
     const hasChecked = useRef(false);
@@ -62,12 +62,15 @@ export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRout
     // Redirect logic
     useEffect(() => {
         if (!isLoading && !isAuthenticated && !isPublicPath(pathname)) {
-            router.replace(`/login?callbackUrl=${encodeURIComponent(pathname)}`);
+            // Déconnexion volontaire : retour à l'accueil, pas vers /login qui rouvrirait
+            // aussitôt la fenêtre Privy (voir loggedOutByUser dans useAuth.ts). Session
+            // expirée ou lien profond sans session : /login, qui ramène ensuite ici.
+            router.replace(loggedOutByUser ? '/' : `/login?callbackUrl=${encodeURIComponent(pathname)}`);
         }
         if (isAuthenticated && requireAdmin && user?.role !== 'ADMIN') {
             router.replace('/dashboard');
         }
-    }, [isAuthenticated, isLoading, user, requireAdmin, router, pathname]);
+    }, [isAuthenticated, isLoading, user, requireAdmin, router, pathname, loggedOutByUser]);
 
     // Only block render (show spinner) on protected routes while loading
     if (isLoading && !isPublicPath(pathname)) {

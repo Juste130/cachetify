@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "../ui/button";
 import { Card } from "../ui/card";
 import { Spinner } from "../ui/spinner";
@@ -36,7 +37,17 @@ export function PrivyAuthCard({ title, subtitle, buttonLabel }: PrivyAuthCardPro
     }
 
     return (
-        <div className="min-h-screen bg-muted flex items-center justify-center p-4">
+        <div className="min-h-screen bg-muted flex flex-col items-center justify-center gap-4 p-4">
+            {/* Sortie explicite : sans elle, le seul chemin vers l'accueil était le logo. */}
+            <div className="w-full max-w-md">
+                <Link
+                    href="/"
+                    className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                    <ArrowLeft className="w-4 h-4" />
+                    Retour à l&apos;accueil
+                </Link>
+            </div>
             <Card className="w-full max-w-md p-8">
                 <div className="text-center mb-8">
                     <Link href="/" className="inline-block">

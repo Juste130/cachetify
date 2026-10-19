@@ -16,6 +16,11 @@ interface AuthState {
     // ProtectedRoute skip a redundant re-check right after a fresh Privy login without
     // reopening that bug: on every fresh page load this always starts false again.
     sessionVerified: boolean;
+    // True right after the user clicked "Se déconnecter" (never persisted). ProtectedRoute
+    // reads it to send them to the landing page instead of /login: without it, clearing the
+    // session on a protected page made ProtectedRoute redirect to /login on its own, AFTER
+    // useLogout's navigation, so the user landed on a page that reopens the Privy modal.
+    loggedOutByUser: boolean;
 
     // Actions
     logout: () => Promise<void>;
@@ -38,6 +43,7 @@ export const useAuthStore = create<AuthState>()(
             isLoading: true,
             error: null,
             sessionVerified: false,
+            loggedOutByUser: false,
 
             logout: async () => {
                 set({ isLoading: true });
@@ -47,16 +53,17 @@ export const useAuthStore = create<AuthState>()(
                         user: null,
                         isAuthenticated: false,
                         isLoading: false,
-                        sessionVerified: false
+                        sessionVerified: false,
+                        loggedOutByUser: true
                     });
-                    // Rediriger vers Home ou Login possible ici ou dans le composant
                 } catch {
                     // Même si l'API échoue, on logout localement
                     set({
                         user: null,
                         isAuthenticated: false,
                         isLoading: false,
-                        sessionVerified: false
+                        sessionVerified: false,
+                        loggedOutByUser: true
                     });
                 }
             },
@@ -69,7 +76,8 @@ export const useAuthStore = create<AuthState>()(
                         user: response.user as any,
                         isAuthenticated: true,
                         isLoading: false,
-                        sessionVerified: true
+                        sessionVerified: true,
+                        loggedOutByUser: false
                     });
                 } catch (error) {
                     // Si la session backend expire mais Privy est toujours connecté
@@ -93,7 +101,8 @@ export const useAuthStore = create<AuthState>()(
                         user: response.user as any,
                         isAuthenticated: true,
                         isLoading: false,
-                        sessionVerified: true
+                        sessionVerified: true,
+                        loggedOutByUser: false
                     });
                 } catch (error: any) {
                     set({
