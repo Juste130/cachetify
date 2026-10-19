@@ -28,6 +28,14 @@ const nextConfig: NextConfig = {
   ],
   // Silences the "multiple lockfiles" warning and fixes the tracing root
   outputFileTracingRoot: path.resolve(__dirname),
+  // @hpke/* ship UMD files: a `define([...])` branch first, the `require("./src/...")` calls
+  // after. The file tracer misses those requires, so the src/ files were left out of the
+  // Netlify function and every route loading @privy-io/server-auth crashed with
+  // "Cannot find module './src/errors.js'". Since these packages are external (not bundled),
+  // all of their files must be shipped explicitly.
+  outputFileTracingIncludes: {
+    "/api/**/*": ["./node_modules/@hpke/**/*"],
+  },
   turbopack: {
     resolveAlias: Object.fromEntries(STUBBED_PACKAGES.map((p) => [p, STUB_MODULE_RELATIVE])),
   },
