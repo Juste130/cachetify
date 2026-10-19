@@ -7,8 +7,9 @@ import { useWeb3 } from "@/contexts/web3-context";
 
 /**
  * Déconnexion complète et réelle : nettoie la session applicative (cookies
- * httpOnly backend) ET déconnecte Privy (wallet inclus), puis redirige vers
- * /login. Les deux étapes sont indépendantes l'une de l'autre : si l'une
+ * httpOnly backend) ET déconnecte Privy (wallet inclus), puis ramène à la page
+ * d'accueil : /login rouvrirait aussitôt la fenêtre Privy, comme si la déconnexion
+ * n'avait pas marché. Les deux étapes sont indépendantes l'une de l'autre : si l'une
  * échoue, l'utilisateur est quand même déconnecté et redirigé.
  */
 export function useLogout() {
@@ -27,7 +28,7 @@ export function useLogout() {
         } catch {
             // Privy peut lever si déjà déconnecté ou non initialisé, sans conséquence
         }
-        router.push("/login");
+        router.replace("/");
     }, [storeLogout, disconnect, router]);
 
     return { logout };
