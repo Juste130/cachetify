@@ -1,6 +1,5 @@
 const aiService = require('../services/ai');
 const logger = require('../utils/logger');
-const { PDFParse } = require('pdf-parse');
 const { BadRequestError } = require('../utils/errors');
 const { isLikelyPdf } = require('../utils/pdf-signature');
 
@@ -75,6 +74,12 @@ async function analyzeImportedPdf(file) {
 
     let extractedText = '';
     try {
+        // Importé ici, pas en haut du fichier : pdf-parse embarque pdfjs-dist, qui référence
+        // DOMMatrix (une API navigateur) au chargement du module. Un import en tête de fichier
+        // faisait planter TOUTES les routes partageant ce contrôleur (y compris
+        // generate-contract, qui ne touche jamais aux PDF) dès le démarrage de la fonction
+        // Netlify, avant même d'atteindre nos try/catch — DOMMatrix n'existe pas côté serveur.
+        const { PDFParse } = require('pdf-parse');
         const parser = new PDFParse({ data: buffer });
         try {
             const result = await parser.getText();
