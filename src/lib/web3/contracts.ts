@@ -35,6 +35,6 @@ export const getContractManager = (signerOrProvider: ethers.Signer | ethers.Prov
 // mémoire, chapitre 3. N'importe qui peut faire de même avec le RPC public et l'identifiant
 // du contrat, sans dépendre de ce site.
 export const getReadOnlyProvider = () => {
-    const rpcUrl = process.env.NEXT_PUBLIC_POLYGON_RPC_URL || 'https://rpc-amoy.polygon.technology';
+    const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-amoy-bor-rpc.publicnode.com';
     return new ethers.JsonRpcProvider(rpcUrl);
 };
