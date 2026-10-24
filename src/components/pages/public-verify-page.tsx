@@ -133,7 +133,7 @@ export function PublicVerifyPage({ id }: PublicVerifyPageProps) {
             </div>
             <h1 className="text-xl font-bold mb-1">Vérification de contrat</h1>
             <p className="text-sm text-muted-foreground">
-              Cette page confirme l'existence et le statut d'un contrat — sans compte, et sans avoir besoin de faire confiance à Cachetify.
+              Cette page confirme l&apos;existence et le statut d&apos;un contrat, sans compte. L&apos;empreinte affichée reste consultable sur la blockchain même si Cachetify disparaît.
             </p>
           </div>
 
