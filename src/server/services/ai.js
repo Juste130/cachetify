@@ -129,14 +129,27 @@ const PHONE_PATTERN = /(?:\+?\d[\s.-]?){8,15}/g;
 
 class AIService {
     constructor() {
-        this.client = new Groq({ apiKey: config.groqApiKey });
         // Modèle Groq gratuit (voir GROQ_MODEL dans .env pour le changer)
         this.model = config.groqModel;
     }
 
+    // Instanciation différée au premier appel plutôt qu'au chargement du module : le
+    // constructeur de Groq lève une exception synchrone si GROQ_API_KEY est absente, ce qui
+    // ferait planter toute la fonction serverless Netlify dès son démarrage (avant même
+    // d'atteindre nos try/catch), avec une page d'erreur generique et aucun log applicatif.
+    // En différant, une clé manquante ou invalide redevient une erreur normale, loguée et
+    // renvoyée en JSON comme n'importe quelle autre (voir getPrivyClient dans http.js, même
+    // précaution pour la même raison).
+    getClient() {
+        if (!this._client) {
+            this._client = new Groq({ apiKey: config.groqApiKey });
+        }
+        return this._client;
+    }
+
     // ─── Méthode interne centrale ────────────────────────────────────────────────
     async _chat(messages, options = {}) {
-        const completion = await this.client.chat.completions.create({
+        const completion = await this.getClient().chat.completions.create({
             model: this.model,
             messages,
             temperature: options.temperature ?? 0.3,
