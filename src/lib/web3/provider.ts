@@ -122,7 +122,7 @@ export const web3Provider = {
                                 chainId,
                                 chainName: 'Polygon Amoy Testnet',
                                 nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
-                                rpcUrls: [process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc-amoy.polygon.technology'],
+                                rpcUrls: [process.env.NEXT_PUBLIC_RPC_URL || 'https://polygon-amoy-bor-rpc.publicnode.com'],
                                 blockExplorerUrls: [process.env.NEXT_PUBLIC_BLOCK_EXPLORER || 'https://amoy.polygonscan.com'],
                             },
                         ],
